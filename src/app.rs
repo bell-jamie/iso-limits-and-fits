@@ -1,59 +1,60 @@
+use crate::tolerance;
+use tolerance::{calculate_fit, FitResult};
+
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)]
 // if we add new fields, give them default values when deserializing old state
+
 pub struct LimitsFitsApp {
     // Example stuff:
     #[serde(skip)]
-    hub_nominal_size: String,
-    hub_tolerance_band: String,
-    hub_tolerance_bands: Vec<String>,
-    hub_tolerance_grade: String,
-    hub_tolerance_grades: Vec<String>,
-    shaft_nominal_size: String,
-    shaft_tolerance_band: String,
-    shaft_tolerance_bands: Vec<String>,
-    shaft_tolerance_grade: String,
-    shaft_tolerance_grades: Vec<String>,
+    hole_basic_size: f64,
+    hole_deviation: String,
+    hole_grade: String,
+    #[serde(skip)]
+    shaft_basic_size: f64,
+    shaft_deviation: String,
+    shaft_grade: String,
+    it_numbers: Vec<String>,
+    hole_position_letters: Vec<String>,
+    shaft_position_letters: Vec<String>,
+    #[serde(skip)]
+    result: Option<FitResult>,
     // #[serde(skip)] // This how you opt-out of serialization of a field
 }
 
 impl Default for LimitsFitsApp {
     fn default() -> Self {
         Self {
-            // Example stuff:
-            hub_nominal_size: "10.0".to_owned(),
-            hub_tolerance_band: "H".to_owned(),
-            hub_tolerance_bands: vec![
+            hole_basic_size: 10.0,
+            hole_deviation: "H".to_owned(),
+            hole_grade: "7".to_owned(),
+            shaft_basic_size: 10.0,
+            shaft_deviation: "h".to_owned(),
+            shaft_grade: "6".to_owned(),
+            it_numbers: vec![
+                "01", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14",
+                "15", "16", "17", "18",
+            ]
+            .iter()
+            .map(|it| it.to_string())
+            .collect(),
+            hole_position_letters: vec![
                 "A", "B", "C", "CD", "D", "E", "EF", "F", "FG", "G", "H", "JS", "J", "K", "M", "N",
                 "P", "R", "S", "T", "U", "V", "X", "Y", "Z", "ZA", "ZB", "ZC",
             ]
             .iter()
-            .map(|class| class.to_string())
+            .map(|deviation| deviation.to_string())
             .collect(),
-            hub_tolerance_grade: "7".to_owned(),
-            hub_tolerance_grades: vec![
-                "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16",
-            ]
-            .iter()
-            .map(|grade| grade.to_string())
-            .collect(),
-            shaft_nominal_size: "10.0".to_owned(),
-            shaft_tolerance_band: "h".to_owned(),
-            shaft_tolerance_bands: vec![
+            shaft_position_letters: vec![
                 "a", "b", "c", "cd", "d", "e", "ef", "f", "fg", "g", "h", "js", "j", "k", "m", "n",
                 "p", "r", "s", "t", "u", "v", "x", "y", "z", "za", "zb", "zc",
             ]
             .iter()
-            .map(|band| band.to_string())
+            .map(|deviation| deviation.to_string())
             .collect(),
-            shaft_tolerance_grade: "6".to_owned(),
-            shaft_tolerance_grades: vec![
-                "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16",
-            ]
-            .iter()
-            .map(|grade| grade.to_string())
-            .collect(),
+            result: None,
         }
     }
 }
@@ -108,68 +109,92 @@ impl eframe::App for LimitsFitsApp {
             // The central panel the region left after adding TopPanel's and SidePanel's
             ui.heading("ISO Limits and Fits Tool");
 
-            ui.label(egui::RichText::new("Hub").strong().underline());
+            ui.label(egui::RichText::new("Hole").strong().underline());
+
+            // ui.horizontal(|ui| {
+            //     ui.label("Basic Size:");
+            //     ui.text_edit_singleline(&mut self.hole_basic_size);
+            // });
 
             ui.horizontal(|ui| {
-                ui.label("Nominal Size:");
-                ui.text_edit_singleline(&mut self.hub_nominal_size);
+                ui.label("Basic Size (mm):");
+                ui.add(egui::DragValue::new(&mut self.hole_basic_size).speed(0.1));
             });
 
             ui.horizontal(|ui| {
-                ui.label("Tolerance Class:");
-                egui::ComboBox::from_id_source("hub-tolerance-band")
-                    .selected_text(&self.hub_tolerance_band)
+                ui.label("Tolerance Zone:");
+                egui::ComboBox::from_id_source("hole-fundamental_deviation")
+                    .selected_text(&self.hole_deviation)
                     .show_ui(ui, |ui| {
-                        for band in &self.hub_tolerance_bands {
-                            ui.selectable_value(&mut self.hub_tolerance_band, band.clone(), band);
+                        for letter in &self.hole_position_letters {
+                            ui.selectable_value(&mut self.hole_deviation, letter.clone(), letter);
                         }
                     });
-                egui::ComboBox::from_id_source("hub-tolerance-grade")
-                    .selected_text(&self.hub_tolerance_grade)
+                egui::ComboBox::from_id_source("hole-tolerance-grade")
+                    .selected_text(&self.hole_grade)
                     .show_ui(ui, |ui| {
-                        for grade in &self.hub_tolerance_grades {
-                            ui.selectable_value(
-                                &mut self.hub_tolerance_grade,
-                                grade.clone(),
-                                grade,
-                            );
+                        for grade in &self.it_numbers {
+                            ui.selectable_value(&mut self.hole_grade, grade.clone(), grade);
                         }
                     });
             });
 
             ui.label(egui::RichText::new("Shaft").strong().underline());
 
+            // ui.horizontal(|ui| {
+            //     ui.label("Basic Size:");
+            //     ui.text_edit_singleline(&mut self.shaft_basic_size);
+            // });
+
             ui.horizontal(|ui| {
-                ui.label("Nominal Size:");
-                ui.text_edit_singleline(&mut self.shaft_nominal_size);
+                ui.label("Basic Size (mm):");
+                ui.add(egui::DragValue::new(&mut self.shaft_basic_size).speed(0.1));
             });
 
             ui.horizontal(|ui| {
-                ui.label("Tolerance Class:");
-                egui::ComboBox::from_id_source("shaft-tolerance-band")
-                    .selected_text(&self.shaft_tolerance_band)
+                ui.label("Tolerance Zone:");
+                egui::ComboBox::from_id_source("shaft-fundamental-deviation")
+                    .selected_text(&self.shaft_deviation)
                     .show_ui(ui, |ui| {
-                        for band in &self.shaft_tolerance_bands {
-                            ui.selectable_value(&mut self.shaft_tolerance_band, band.clone(), band);
+                        for letter in &self.shaft_position_letters {
+                            ui.selectable_value(&mut self.shaft_deviation, letter.clone(), letter);
                         }
                     });
                 egui::ComboBox::from_id_source("shaft-tolerance-grade")
-                    .selected_text(&self.shaft_tolerance_grade)
+                    .selected_text(&self.shaft_grade)
                     .show_ui(ui, |ui| {
-                        for grade in &self.shaft_tolerance_grades {
-                            ui.selectable_value(
-                                &mut self.shaft_tolerance_grade,
-                                grade.clone(),
-                                grade,
-                            );
+                        for grade in &self.it_numbers {
+                            ui.selectable_value(&mut self.shaft_grade, grade.clone(), grade);
                         }
                     });
             });
 
             ui.separator();
 
+            if ui.button("Calculate").clicked() {
+                self.result = calculate_fit(
+                    self.hole_basic_size,
+                    &self.hole_deviation,
+                    &self.hole_grade,
+                    self.shaft_basic_size,
+                    &self.shaft_deviation,
+                    &self.shaft_grade,
+                );
+            }
+
+            if let Some(result) = &self.result {
+                ui.label(format!("Lower Deviation: {:.3}", result.lower_deviation));
+                ui.label(format!("Upper Deviation: {:.3}", result.upper_deviation));
+                ui.label(format!("Allowance: {:.3}", result.allowance));
+                ui.label(format!("Fit Type: {}", result.fit_type));
+            } else {
+                ui.label(format!("No Results"));
+            }
+
+            ui.separator();
+
             ui.add(egui::github_link_file!(
-                "https://github.com/emilk/eframe_template/blob/main/",
+                "https://github.com/bell-jamie/iso-limits-and-fits",
                 "Source code."
             ));
 
