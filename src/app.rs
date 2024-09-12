@@ -9,11 +9,9 @@ use tolerance::{calculate_fit, FitResult};
 pub struct LimitsFitsApp {
     // Example stuff:
     #[serde(skip)]
-    hole_basic_size: f64,
+    basic_size: f64,
     hole_deviation: String,
     hole_grade: String,
-    #[serde(skip)]
-    shaft_basic_size: f64,
     shaft_deviation: String,
     shaft_grade: String,
     it_numbers: Vec<String>,
@@ -27,10 +25,9 @@ pub struct LimitsFitsApp {
 impl Default for LimitsFitsApp {
     fn default() -> Self {
         Self {
-            hole_basic_size: 10.0,
+            basic_size: 10.0,
             hole_deviation: "H".to_owned(),
             hole_grade: "7".to_owned(),
-            shaft_basic_size: 10.0,
             shaft_deviation: "h".to_owned(),
             shaft_grade: "6".to_owned(),
             it_numbers: vec![
@@ -109,20 +106,20 @@ impl eframe::App for LimitsFitsApp {
             // The central panel the region left after adding TopPanel's and SidePanel's
             ui.heading("ISO Limits and Fits Tool");
 
-            ui.label(egui::RichText::new("Hole").strong().underline());
+            ui.label(egui::RichText::new("Input").strong().underline());
 
             // ui.horizontal(|ui| {
-            //     ui.label("Basic Size:");
-            //     ui.text_edit_singleline(&mut self.hole_basic_size);
+            //     ui.label("Basic Size (mm):");
+            //     ui.text_edit_singleline(&mut self.basic_size);
             // });
 
             ui.horizontal(|ui| {
                 ui.label("Basic Size (mm):");
-                ui.add(egui::DragValue::new(&mut self.hole_basic_size).speed(0.1));
+                ui.add(egui::DragValue::new(&mut self.basic_size).speed(0.1));
             });
 
             ui.horizontal(|ui| {
-                ui.label("Tolerance Zone:");
+                ui.label("Hole Tolerance:");
                 egui::ComboBox::from_id_source("hole-fundamental_deviation")
                     .selected_text(&self.hole_deviation)
                     .show_ui(ui, |ui| {
@@ -139,20 +136,8 @@ impl eframe::App for LimitsFitsApp {
                     });
             });
 
-            ui.label(egui::RichText::new("Shaft").strong().underline());
-
-            // ui.horizontal(|ui| {
-            //     ui.label("Basic Size:");
-            //     ui.text_edit_singleline(&mut self.shaft_basic_size);
-            // });
-
             ui.horizontal(|ui| {
-                ui.label("Basic Size (mm):");
-                ui.add(egui::DragValue::new(&mut self.shaft_basic_size).speed(0.1));
-            });
-
-            ui.horizontal(|ui| {
-                ui.label("Tolerance Zone:");
+                ui.label("Shaft Tolerance:");
                 egui::ComboBox::from_id_source("shaft-fundamental-deviation")
                     .selected_text(&self.shaft_deviation)
                     .show_ui(ui, |ui| {
@@ -169,24 +154,47 @@ impl eframe::App for LimitsFitsApp {
                     });
             });
 
+            self.result = calculate_fit(
+                self.basic_size,
+                &self.hole_deviation,
+                &self.hole_grade,
+                &self.shaft_deviation,
+                &self.shaft_grade,
+            );
+
+            // if ui.button("Calculate").clicked() {
+            //     self.result = calculate_fit(
+            //         self.basic_size,
+            //         &self.hole_deviation,
+            //         &self.hole_grade,
+            //         &self.shaft_deviation,
+            //         &self.shaft_grade,
+            //     );
+            // }
+
             ui.separator();
 
-            if ui.button("Calculate").clicked() {
-                self.result = calculate_fit(
-                    self.hole_basic_size,
-                    &self.hole_deviation,
-                    &self.hole_grade,
-                    self.shaft_basic_size,
-                    &self.shaft_deviation,
-                    &self.shaft_grade,
-                );
-            }
+            ui.label(egui::RichText::new("Results").strong().underline());
 
             if let Some(result) = &self.result {
-                ui.label(format!("Lower Deviation: {:.3}", result.lower_deviation));
-                ui.label(format!("Upper Deviation: {:.3}", result.upper_deviation));
-                ui.label(format!("Allowance: {:.3}", result.allowance));
-                ui.label(format!("Fit Type: {}", result.fit_type));
+                ui.label(format!(
+                    "Fit: {:.3} µm {}",
+                    result.fit_midlimits, result.fit_type
+                ));
+                ui.horizontal(|ui| {
+                    ui.label("Hole size:");
+                    ui.vertical(|ui| {
+                        ui.label(format!("{:.3}", result.hole_lmc));
+                        ui.label(format!("{:.3}", result.hole_mmc));
+                    })
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Shaft size:");
+                    ui.vertical(|ui| {
+                        ui.label(format!("{:.3}", result.shaft_mmc));
+                        ui.label(format!("{:.3}", result.shaft_lmc));
+                    })
+                });
             } else {
                 ui.label(format!("No Results"));
             }
@@ -216,6 +224,8 @@ fn powered_by_egui_and_eframe(ui: &mut egui::Ui) {
             "eframe",
             "https://github.com/emilk/egui/tree/master/crates/eframe",
         );
+        ui.label(". Created by ");
+        ui.hyperlink_to("James Bell", "https://www.linkedin.com/in/bell-jamie/");
         ui.label(".");
     });
 }

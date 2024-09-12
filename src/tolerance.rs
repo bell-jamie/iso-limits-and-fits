@@ -1,21 +1,30 @@
 #![warn(clippy::all)]
 
 pub struct FitResult {
-    pub lower_deviation: f64,
-    pub upper_deviation: f64,
-    pub allowance: f64,
     pub fit_type: String,
+    pub fit_lmc: f64,
+    pub fit_mmc: f64,
+    pub fit_midlimits: f64,
+    pub hole_lmc: f64,
+    pub hole_mmc: f64,
+    pub hole_midlimits: f64,
+    pub shaft_lmc: f64,
+    pub shaft_mmc: f64,
+    pub shaft_midlimits: f64,
 }
 
-pub const TOLERANCE_TABLE: &[(&str, f64, f64)] = &[("10H7", 0.0, 0.015), ("10g6", -0.015, -0.03)];
-
-pub const IT_MAP: &[&str; 20] = &[
+pub const GRADE_MAP: &[&str; 20] = &[
     "01", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15",
     "16", "17", "18",
 ];
 
-// Stored as 1/10th of a micrometre
-pub const IT_TABLE: &[[i32; 21]; 21] = &[
+pub const DEVIATION_MAP: &[&str; 28] = &[
+    "a", "b", "c", "cd", "d", "e", "ef", "f", "fg", "g", "h", "js", "j", "k", "m", "n", "p", "r",
+    "s", "t", "u", "v", "x", "y", "z", "za", "zb", "zc",
+];
+// Nominal size in millimetres
+// Tolerances as 1/10th of a micrometre
+pub const STANDARD_TOLERANCE_GRADES: &[[i32; 21]; 21] = &[
     [
         3, 3, 5, 8, 12, 20, 30, 40, 60, 100, 140, 250, 400, 600, 1_000, 1_400, 2_500, 4_000, 6_000,
         10_000, 14_000,
@@ -102,60 +111,117 @@ pub const IT_TABLE: &[[i32; 21]; 21] = &[
     ],
 ];
 
-pub fn get_tolerance(size: f64, deviation: &str, grade: &str) -> Option<(f64, f64)> {
-    // For now we're ignoring the deviation...
-    let size_rounded = size.round() as i32;
-    let mut i = 21;
-    let j = IT_MAP.iter().position(|&g| g == grade).unwrap() + 1;
+// Nominal size in millimetres
+// Deviation in micrometres
+pub const LOWER_DEVIATIONS_A_JS: &[[i32; 11]; 30] = &[
+    [3, 270, 140, 60, 34, 20, 14, 10, 6, 4, 2],
+    [6, 270, 140, 70, 46, 30, 20, 14, 10, 6, 4],
+    [10, 280, 150, 80, 56, 40, 25, 18, 13, 8, 5],
+    // 14 --
+    [18, 290, 150, 95, 70, 50, 32, 23, 16, 10, 6],
+    // 24 --
+    [30, 300, 160, 110, 85, 65, 40, 28, 20, 12, 7],
+    [40, 310, 170, 120, 100, 80, 50, 35, 25, 15, 9],
+    [50, 320, 180, 130, 100, 80, 50, 35, 25, 15, 9],
+    [65, 340, 190, 140, -1, 100, 60, -1, 30, -1, 10],
+    [80, 360, 200, 150, -1, 100, 60, -1, 30, -1, 10],
+    [100, 380, 220, 170, -1, 120, 72, -1, 36, -1, 12],
+    [120, 410, 240, 180, -1, 120, 72, -1, 36, -1, 12],
+    [140, 460, 260, 200, -1, 145, 85, -1, 43, -1, 14],
+    [160, 520, 280, 210, -1, 145, 85, -1, 43, -1, 14],
+    [200, 660, 340, 240, -1, 170, 100, -1, 50, -1, 15],
+    [225, 740, 380, 260, -1, 170, 100, -1, 50, -1, 15],
+    [250, 820, 420, 280, -1, 170, 100, -1, 50, -1, 15],
+    [280, 920, 480, 300, -1, 190, 110, -1, 56, -1, 17],
+    [315, 1_050, 540, 330, -1, 190, 110, -1, 56, -1, 17],
+    [355, 1_200, 600, 360, -1, 210, 125, -1, 62, -1, 18],
+    [400, 1_350, 680, 400, -1, 210, 125, -1, 62, -1, 18],
+    [450, 1_500, 760, 440, -1, 230, 135, -1, 68, -1, 20],
+    [500, 1_650, 840, 480, -1, 230, 135, -1, 68, -1, 20],
+    // 560 --
+    [630, -1, -1, -1, -1, 260, 145, -1, 76, -1, 22],
+    // 710
+    [800, -1, -1, -1, -1, 290, 160, -1, 80, -1, 24],
+    // 900
+    [1_000, -1, -1, -1, -1, 320, 170, -1, 86, -1, 26],
+    // 1_120
+    [1_250, -1, -1, -1, -1, 350, 195, -1, 98, -1, 28],
+    // 1_400
+    [1_600, -1, -1, -1, -1, 390, 220, -1, 110, -1, 30],
+    // 1_800
+    [2_000, -1, -1, -1, -1, 430, 240, -1, 120, -1, 32],
+    // 2_240
+    [2_500, -1, -1, -1, -1, 480, 260, -1, 130, -1, 34],
+    // 2_800
+    [3_150, -1, -1, -1, -1, 520, 290, -1, 145, -1, 38],
+];
 
-    for (idx, row) in IT_TABLE.iter().enumerate() {
-        if size_rounded < row[0] {
-            i = idx - 1;
-            break;
-        }
-    }
+pub fn get_tolerance(size: f64, deviation_str: &str, grade_str: &str) -> Option<(f64, f64)> {
+    let size_rounded = size.ceil() as i32;
+    let grade_id = GRADE_MAP.iter().position(|&g| g == grade_str)? + 1; // +1 to ignore size column
+    let deviation_id = DEVIATION_MAP
+        .iter()
+        .position(|&d| d.eq_ignore_ascii_case(deviation_str))?
+        + 1; // +1 to ignore size column
+    let tolerance_row = STANDARD_TOLERANCE_GRADES
+        .iter()
+        .position(|&r| r[0] >= size_rounded)?;
+    let deviation_row = LOWER_DEVIATIONS_A_JS
+        .iter()
+        .position(|&r| r[0] >= size_rounded)?;
 
-    if i < 22 && IT_TABLE[i][j] != -1 {
-        Some((0.0, IT_TABLE[i][j] as f64 / 10000.0))
+    let tolerance = *STANDARD_TOLERANCE_GRADES[tolerance_row].get(grade_id)? as f64 / 10_000.0;
+    let deviation = if deviation_str.to_uppercase() == "H" {
+        0.0
     } else {
-        None
+        *LOWER_DEVIATIONS_A_JS[deviation_row].get(deviation_id)? as f64 / 1_000.0
+    };
+
+    if deviation_str.chars().next().unwrap().is_uppercase() {
+        Some((deviation + tolerance, deviation))
+    } else {
+        Some((-deviation, -deviation - tolerance))
     }
-    // TOLERANCE_TABLE.iter().find_map(|(name, lower, upper)| {
-    //     if *name == tolerance_zone {
-    //         Some((*lower, *upper))
-    //     } else {
-    //         None
-    //     }
-    // })
 }
 
 pub fn calculate_fit(
-    hole_basic_size: f64,
+    basic_size: f64,
     hole_deviation: &str,
     hole_grade: &str,
-    shaft_basic_size: f64,
     shaft_deviation: &str,
     shaft_grade: &str,
 ) -> Option<FitResult> {
-    let (hole_lower, hole_upper) = get_tolerance(hole_basic_size, hole_deviation, hole_grade)?;
-    let (shaft_lower, shaft_upper) = get_tolerance(shaft_basic_size, shaft_deviation, shaft_grade)?;
+    let (hole_upper, hole_lower) = get_tolerance(basic_size, hole_deviation, hole_grade)?;
+    let (shaft_upper, shaft_lower) = get_tolerance(basic_size, shaft_deviation, shaft_grade)?;
 
-    let lower_deviation = hole_lower; // shaft_lower - hole_upper;
-    let upper_deviation = hole_upper; // shaft_upper - hole_lower;
-    let allowance = shaft_upper - hole_upper;
+    let (hole_lmc, hole_mmc) = (basic_size + hole_upper, basic_size + hole_lower);
+    let (shaft_mmc, shaft_lmc) = (basic_size + shaft_upper, basic_size + shaft_lower);
 
-    let fit_type = if lower_deviation > 0.0 {
+    let fit_lmc = hole_lmc - shaft_lmc;
+    let fit_mmc = hole_mmc - shaft_mmc;
+
+    let fit_type = if fit_lmc > 0.0 && fit_mmc > 0.0 {
         "Clearance".to_owned()
-    } else if upper_deviation < 0.0 {
+    } else if fit_lmc < 0.0 && fit_mmc < 0.0 {
         "Interference".to_owned()
     } else {
         "Transition".to_owned()
     };
 
+    let hole_midlimits = (hole_lmc + hole_mmc) / 2.0;
+    let shaft_midlimits = (shaft_lmc + shaft_mmc) / 2.0;
+    let fit_midlimits = (fit_lmc + fit_mmc) / 2.0;
+
     Some(FitResult {
-        lower_deviation,
-        upper_deviation,
-        allowance,
         fit_type,
+        fit_lmc,
+        fit_mmc,
+        fit_midlimits,
+        hole_lmc,
+        hole_mmc,
+        hole_midlimits,
+        shaft_lmc,
+        shaft_mmc,
+        shaft_midlimits,
     })
 }
