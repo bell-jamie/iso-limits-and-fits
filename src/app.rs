@@ -107,18 +107,18 @@ impl eframe::App for LimitsFitsApp {
             ui.heading("ISO Limits and Fits Tool");
 
             ui.label(egui::RichText::new("Input").strong().underline());
+            ui.add_space(5.0);
 
             // ui.horizontal(|ui| {
             //     ui.label("Basic Size (mm):");
             //     ui.text_edit_singleline(&mut self.basic_size);
             // });
 
-            ui.horizontal(|ui| {
+            egui::Grid::new("inputs").show(ui, |ui| {
                 ui.label("Basic Size (mm):");
                 ui.add(egui::DragValue::new(&mut self.basic_size).speed(0.1));
-            });
+                ui.end_row();
 
-            ui.horizontal(|ui| {
                 ui.label("Hole Tolerance:");
                 egui::ComboBox::from_id_source("hole-fundamental_deviation")
                     .selected_text(&self.hole_deviation)
@@ -134,9 +134,8 @@ impl eframe::App for LimitsFitsApp {
                             ui.selectable_value(&mut self.hole_grade, grade.clone(), grade);
                         }
                     });
-            });
+                ui.end_row();
 
-            ui.horizontal(|ui| {
                 ui.label("Shaft Tolerance:");
                 egui::ComboBox::from_id_source("shaft-fundamental-deviation")
                     .selected_text(&self.shaft_deviation)
@@ -162,41 +161,80 @@ impl eframe::App for LimitsFitsApp {
                 &self.shaft_grade,
             );
 
-            // if ui.button("Calculate").clicked() {
-            //     self.result = calculate_fit(
-            //         self.basic_size,
-            //         &self.hole_deviation,
-            //         &self.hole_grade,
-            //         &self.shaft_deviation,
-            //         &self.shaft_grade,
-            //     );
-            // }
-
             ui.separator();
 
-            ui.label(egui::RichText::new("Results").strong().underline());
-
             if let Some(result) = &self.result {
-                ui.label(format!(
-                    "Fit: {:.3} µm {}",
-                    result.fit_midlimits, result.fit_type
-                ));
-                ui.horizontal(|ui| {
-                    ui.label("Hole size:");
-                    ui.vertical(|ui| {
-                        ui.label(format!("{:.3}", result.hole_lmc));
-                        ui.label(format!("{:.3}", result.hole_mmc));
-                    })
-                });
-                ui.horizontal(|ui| {
-                    ui.label("Shaft size:");
-                    ui.vertical(|ui| {
-                        ui.label(format!("{:.3}", result.shaft_mmc));
-                        ui.label(format!("{:.3}", result.shaft_lmc));
-                    })
-                });
+                ui.label(egui::RichText::new("Fit").strong().underline());
+                ui.add_space(5.0);
+
+                ui.label(format!("{} fit", result.fit_type));
+                egui::Grid::new("fit_results")
+                    .striped(false)
+                    .show(ui, |ui| {
+                        ui.label("Maximum:");
+                        ui.label(format!("{:.} µm", 1000.0 * result.fit_upper));
+                        ui.end_row();
+
+                        ui.label("Minimum:");
+                        ui.label(format!("{:.} µm", 1000.0 * result.fit_lower));
+                        ui.end_row();
+
+                        ui.label("Mid-limits:");
+                        ui.label(format!("{:.} µm", 1000.0 * result.fit_middle));
+                        ui.end_row();
+                    });
+
+                ui.add_space(10.0);
+                ui.label(egui::RichText::new("Hole").strong().underline());
+                ui.add_space(5.0);
+
+                egui::Grid::new("hole_results")
+                    .striped(false)
+                    .show(ui, |ui| {
+                        ui.label("Maximum:");
+                        ui.label(format!("{:.} mm", self.basic_size + result.hole_upper));
+                        ui.end_row();
+
+                        ui.label("Minimum:");
+                        ui.label(format!("{:.} mm", self.basic_size + result.hole_lower));
+                        ui.end_row();
+
+                        ui.label("Mid-limits:");
+                        ui.label(format!(
+                            "{:.} ± {:.} mm",
+                            self.basic_size + result.hole_middle,
+                            result.hole_middle.abs()
+                        ));
+                        ui.end_row();
+                    });
+
+                ui.add_space(10.0);
+                ui.label(egui::RichText::new("Shaft").strong().underline());
+                ui.add_space(5.0);
+
+                egui::Grid::new("shaft_results")
+                    .striped(false)
+                    // .spacing([12.0, 8.0])
+                    .show(ui, |ui| {
+                        ui.label("Maximum:");
+                        ui.label(format!("{:.} mm", self.basic_size + result.shaft_upper));
+                        ui.end_row();
+
+                        ui.label("Minimum:");
+                        ui.label(format!("{:.} mm", self.basic_size + result.shaft_lower));
+                        // can do precision specifier like "{:.*}", precision, answer
+                        ui.end_row();
+
+                        ui.label("Mid-limits:");
+                        ui.label(format!(
+                            "{:.} ± {:.} mm",
+                            self.basic_size + result.shaft_middle,
+                            result.shaft_middle.abs()
+                        ));
+                        ui.end_row();
+                    });
             } else {
-                ui.label(format!("No Results"));
+                ui.label(format!("No Results!"));
             }
 
             ui.separator();

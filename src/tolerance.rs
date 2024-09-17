@@ -2,15 +2,15 @@
 
 pub struct FitResult {
     pub fit_type: String,
-    pub fit_lmc: f64,
-    pub fit_mmc: f64,
-    pub fit_midlimits: f64,
-    pub hole_lmc: f64,
-    pub hole_mmc: f64,
-    pub hole_midlimits: f64,
-    pub shaft_lmc: f64,
-    pub shaft_mmc: f64,
-    pub shaft_midlimits: f64,
+    pub fit_upper: f64,
+    pub fit_middle: f64,
+    pub fit_lower: f64,
+    pub hole_upper: f64,
+    pub hole_middle: f64,
+    pub hole_lower: f64,
+    pub shaft_upper: f64,
+    pub shaft_middle: f64,
+    pub shaft_lower: f64,
 }
 
 pub const GRADE_MAP: &[&str; 20] = &[
@@ -193,35 +193,40 @@ pub fn calculate_fit(
 ) -> Option<FitResult> {
     let (hole_upper, hole_lower) = get_tolerance(basic_size, hole_deviation, hole_grade)?;
     let (shaft_upper, shaft_lower) = get_tolerance(basic_size, shaft_deviation, shaft_grade)?;
+    let (hole_middle, shaft_middle) = (
+        (hole_upper + hole_lower) / 2.0,
+        (shaft_upper + shaft_lower) / 2.0,
+    );
 
-    let (hole_lmc, hole_mmc) = (basic_size + hole_upper, basic_size + hole_lower);
-    let (shaft_mmc, shaft_lmc) = (basic_size + shaft_upper, basic_size + shaft_lower);
+    // let (shaft_mmc, hole_mmc) = (basic_size + hole_lower, basic_size + shaft_upper);
+    // let (hole_lmc, shaft_lmc) = (basic_size + hole_upper, basic_size + shaft_lower);
 
-    let fit_lmc = hole_lmc - shaft_lmc;
-    let fit_mmc = hole_mmc - shaft_mmc;
+    let fit_upper = hole_lower - shaft_upper;
+    let fit_lower = hole_upper - shaft_lower;
+    let fit_middle = (fit_upper + fit_lower) / 2.0;
 
-    let fit_type = if fit_lmc > 0.0 && fit_mmc > 0.0 {
+    let fit_type = if fit_lower > 0.0 && fit_upper > 0.0 {
         "Clearance".to_owned()
-    } else if fit_lmc < 0.0 && fit_mmc < 0.0 {
+    } else if fit_lower < 0.0 && fit_upper < 0.0 {
         "Interference".to_owned()
     } else {
         "Transition".to_owned()
     };
 
-    let hole_midlimits = (hole_lmc + hole_mmc) / 2.0;
-    let shaft_midlimits = (shaft_lmc + shaft_mmc) / 2.0;
-    let fit_midlimits = (fit_lmc + fit_mmc) / 2.0;
+    // let hole_midlimits = (hole_lmc + hole_mmc) / 2.0;
+    // let shaft_midlimits = (shaft_lmc + shaft_mmc) / 2.0;
+    // let fit_midlimits = (fit_lower + fit_upper) / 2.0;
 
     Some(FitResult {
         fit_type,
-        fit_lmc,
-        fit_mmc,
-        fit_midlimits,
-        hole_lmc,
-        hole_mmc,
-        hole_midlimits,
-        shaft_lmc,
-        shaft_mmc,
-        shaft_midlimits,
+        fit_upper,
+        fit_middle,
+        fit_lower,
+        hole_upper,
+        hole_middle,
+        hole_lower,
+        shaft_upper,
+        shaft_middle,
+        shaft_lower,
     })
 }
