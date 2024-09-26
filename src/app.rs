@@ -1,5 +1,5 @@
 use crate::tolerance;
-use tolerance::{calculate_fit, FitResult};
+use tolerance::{calculate_fit, n_round, Core, Result};
 
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
 #[derive(serde::Deserialize, serde::Serialize)]
@@ -7,29 +7,28 @@ use tolerance::{calculate_fit, FitResult};
 // if we add new fields, give them default values when deserializing old state
 
 pub struct LimitsFitsApp {
-    // Example stuff:
     #[serde(skip)]
-    basic_size: f64,
-    hole_deviation: String,
-    hole_grade: String,
-    shaft_deviation: String,
-    shaft_grade: String,
+    core: Core,
+    #[serde(skip)]
     it_numbers: Vec<String>,
+    #[serde(skip)]
     hole_position_letters: Vec<String>,
+    #[serde(skip)]
     shaft_position_letters: Vec<String>,
     #[serde(skip)]
-    result: Option<FitResult>,
-    // #[serde(skip)] // This how you opt-out of serialization of a field
+    result: Option<Result>,
 }
 
 impl Default for LimitsFitsApp {
     fn default() -> Self {
         Self {
-            basic_size: 10.0,
-            hole_deviation: "H".to_owned(),
-            hole_grade: "7".to_owned(),
-            shaft_deviation: "h".to_owned(),
-            shaft_grade: "6".to_owned(),
+            core: Core {
+                basic_size: 10.0,
+                hole_deviation: "H".to_owned(),
+                hole_grade: "7".to_owned(),
+                shaft_deviation: "h".to_owned(),
+                shaft_grade: "6".to_owned(),
+            },
             it_numbers: vec![
                 "01", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14",
                 "15", "16", "17", "18",
@@ -116,71 +115,98 @@ impl eframe::App for LimitsFitsApp {
 
             egui::Grid::new("inputs").show(ui, |ui| {
                 ui.label("Basic Size (mm):");
-                ui.add(egui::DragValue::new(&mut self.basic_size).speed(0.1));
+                ui.add(egui::DragValue::new(&mut self.core.basic_size).speed(0.1));
                 ui.end_row();
 
                 ui.label("Hole Tolerance:");
                 egui::ComboBox::from_id_source("hole-fundamental_deviation")
-                    .selected_text(&self.hole_deviation)
+                    .selected_text(&self.core.hole_deviation)
                     .show_ui(ui, |ui| {
                         for letter in &self.hole_position_letters {
-                            ui.selectable_value(&mut self.hole_deviation, letter.clone(), letter);
+                            ui.selectable_value(
+                                &mut self.core.hole_deviation,
+                                letter.clone(),
+                                letter,
+                            );
                         }
                     });
                 egui::ComboBox::from_id_source("hole-tolerance-grade")
-                    .selected_text(&self.hole_grade)
+                    .selected_text(&self.core.hole_grade)
                     .show_ui(ui, |ui| {
                         for grade in &self.it_numbers {
-                            ui.selectable_value(&mut self.hole_grade, grade.clone(), grade);
+                            ui.selectable_value(&mut self.core.hole_grade, grade.clone(), grade);
                         }
                     });
                 ui.end_row();
 
                 ui.label("Shaft Tolerance:");
                 egui::ComboBox::from_id_source("shaft-fundamental-deviation")
-                    .selected_text(&self.shaft_deviation)
+                    .selected_text(&self.core.shaft_deviation)
                     .show_ui(ui, |ui| {
                         for letter in &self.shaft_position_letters {
-                            ui.selectable_value(&mut self.shaft_deviation, letter.clone(), letter);
+                            ui.selectable_value(
+                                &mut self.core.shaft_deviation,
+                                letter.clone(),
+                                letter,
+                            );
                         }
                     });
                 egui::ComboBox::from_id_source("shaft-tolerance-grade")
-                    .selected_text(&self.shaft_grade)
+                    .selected_text(&self.core.shaft_grade)
                     .show_ui(ui, |ui| {
                         for grade in &self.it_numbers {
-                            ui.selectable_value(&mut self.shaft_grade, grade.clone(), grade);
+                            ui.selectable_value(&mut self.core.shaft_grade, grade.clone(), grade);
                         }
                     });
             });
 
-            self.result = calculate_fit(
-                self.basic_size,
-                &self.hole_deviation,
-                &self.hole_grade,
-                &self.shaft_deviation,
-                &self.shaft_grade,
-            );
+            self.result = calculate_fit(&self.core);
 
             ui.separator();
 
             if let Some(result) = &self.result {
-                ui.label(egui::RichText::new("Fit").strong().underline());
+                ui.label(
+                    egui::RichText::new(format!("{} Fit", result.fit.class))
+                        .strong()
+                        .underline(),
+                );
                 ui.add_space(5.0);
 
-                ui.label(format!("{} fit", result.fit_type));
                 egui::Grid::new("fit_results")
                     .striped(false)
                     .show(ui, |ui| {
-                        ui.label("Maximum:");
-                        ui.label(format!("{:.} µm", 1000.0 * result.fit_upper));
+                        ui.label(format!(
+                            "{}:",
+                            if result.fit.class == "Transition" {
+                                "Clearance"
+                            } else {
+                                "Maximum"
+                            }
+                        ));
+                        ui.label(format!("{:.} µm", n_round(1000.0 * result.fit.upper, -1)));
                         ui.end_row();
 
-                        ui.label("Minimum:");
-                        ui.label(format!("{:.} µm", 1000.0 * result.fit_lower));
+                        ui.label(format!(
+                            "{}:",
+                            if result.fit.class == "Transition" {
+                                "Interference"
+                            } else {
+                                "Minimum"
+                            }
+                        ));
+                        ui.label(format!("{:.} µm", n_round(1000.0 * result.fit.lower, -1)));
                         ui.end_row();
 
                         ui.label("Mid-limits:");
-                        ui.label(format!("{:.} µm", 1000.0 * result.fit_middle));
+                        ui.label(format!(
+                            "{:.} µm {}",
+                            n_round(1000.0 * result.fit.mid_limits, -1),
+                            if result.fit.class == "Transition" {
+                                &result.fit.mid_class
+                            } else {
+                                ""
+                            }
+                        ));
                         ui.end_row();
                     });
 
@@ -192,18 +218,26 @@ impl eframe::App for LimitsFitsApp {
                     .striped(false)
                     .show(ui, |ui| {
                         ui.label("Maximum:");
-                        ui.label(format!("{:.} mm", self.basic_size + result.hole_upper));
+                        ui.label(format!(
+                            "{:.} mm ({} µm)",
+                            n_round(result.hole.size.upper, -1),
+                            n_round(1000.0 * result.hole.tolerance.upper, -1)
+                        ));
                         ui.end_row();
 
                         ui.label("Minimum:");
-                        ui.label(format!("{:.} mm", self.basic_size + result.hole_lower));
+                        ui.label(format!(
+                            "{:.} mm ({} µm)",
+                            n_round(result.hole.size.lower, -1),
+                            n_round(1000.0 * result.hole.tolerance.lower, -1)
+                        ));
                         ui.end_row();
 
                         ui.label("Mid-limits:");
                         ui.label(format!(
-                            "{:.} ± {:.} mm",
-                            self.basic_size + result.hole_middle,
-                            result.hole_middle.abs()
+                            "{:.} mm ± {:.} µm",
+                            n_round(result.hole.size.mid_limits, -1),
+                            n_round(1000.0 * result.hole.tolerance.mid_limits, -1)
                         ));
                         ui.end_row();
                     });
@@ -217,19 +251,27 @@ impl eframe::App for LimitsFitsApp {
                     // .spacing([12.0, 8.0])
                     .show(ui, |ui| {
                         ui.label("Maximum:");
-                        ui.label(format!("{:.} mm", self.basic_size + result.shaft_upper));
+                        ui.label(format!(
+                            "{:.} mm ({} µm)",
+                            n_round(result.shaft.size.upper, -1),
+                            n_round(1000.0 * result.shaft.tolerance.upper, -1)
+                        ));
                         ui.end_row();
 
                         ui.label("Minimum:");
-                        ui.label(format!("{:.} mm", self.basic_size + result.shaft_lower));
+                        ui.label(format!(
+                            "{:.} mm ({} µm)",
+                            n_round(result.shaft.size.lower, -1),
+                            n_round(1000.0 * result.shaft.tolerance.lower, -1)
+                        ));
                         // can do precision specifier like "{:.*}", precision, answer
                         ui.end_row();
 
                         ui.label("Mid-limits:");
                         ui.label(format!(
-                            "{:.} ± {:.} mm",
-                            self.basic_size + result.shaft_middle,
-                            result.shaft_middle.abs()
+                            "{:.} mm ± {:.} µm",
+                            n_round(result.shaft.size.mid_limits, -1),
+                            n_round(1000.0 * result.shaft.tolerance.mid_limits, -1)
                         ));
                         ui.end_row();
                     });
@@ -239,10 +281,10 @@ impl eframe::App for LimitsFitsApp {
 
             ui.separator();
 
-            ui.add(egui::github_link_file!(
-                "https://github.com/bell-jamie/iso-limits-and-fits",
-                "Source code."
-            ));
+            // ui.add(egui::github_link_file!(
+            //     "https://github.com/bell-jamie/iso-limits-and-fits",
+            //     "Source code."
+            // ));
 
             ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
                 powered_by_egui_and_eframe(ui);

@@ -1,16 +1,110 @@
 #![warn(clippy::all)]
 
-pub struct FitResult {
-    pub fit_type: String,
-    pub fit_upper: f64,
-    pub fit_middle: f64,
-    pub fit_lower: f64,
-    pub hole_upper: f64,
-    pub hole_middle: f64,
-    pub hole_lower: f64,
-    pub shaft_upper: f64,
-    pub shaft_middle: f64,
-    pub shaft_lower: f64,
+pub struct Core {
+    pub basic_size: f64,
+    pub hole_deviation: String,
+    pub hole_grade: String,
+    pub shaft_deviation: String,
+    pub shaft_grade: String,
+}
+
+pub struct Tolerance {
+    pub upper: f64,
+    pub lower: f64,
+    pub mid_limits: f64,
+}
+
+impl Tolerance {
+    fn new(tolerances: (f64, f64)) -> Self {
+        let (upper, lower) = tolerances;
+        let mid_limits = upper - (upper + lower) / 2.0;
+
+        Self {
+            upper,
+            lower,
+            mid_limits,
+        }
+    }
+}
+
+pub struct Size {
+    pub basic: f64,
+    pub upper: f64,
+    pub lower: f64,
+    pub mid_limits: f64,
+}
+
+impl Size {
+    fn new(basic: f64, tolerance: &Tolerance) -> Self {
+        let upper = basic + tolerance.upper;
+        let lower = basic + tolerance.lower;
+        let mid_limits = (upper + lower) / 2.0;
+
+        Self {
+            basic,
+            upper,
+            lower,
+            mid_limits,
+        }
+    }
+}
+
+pub struct Fit {
+    pub class: String,
+    pub upper: f64,
+    pub lower: f64,
+    pub mid_class: String,
+    pub mid_limits: f64,
+}
+
+impl Fit {
+    fn new(hole: &Feature, shaft: &Feature) -> Self {
+        let mmc = hole.tolerance.lower - shaft.tolerance.upper;
+        let lmc = hole.tolerance.upper - shaft.tolerance.lower;
+        let mid_limits = mmc - (mmc - lmc) / 2.0;
+
+        let upper = mmc.max(lmc);
+        let lower = mmc.min(lmc);
+
+        let class = if mmc >= 0.0 {
+            "Clearance".to_owned()
+        } else if lmc <= 0.0 {
+            "Interference".to_owned()
+        } else {
+            "Transition".to_owned()
+        };
+
+        let mid_class = if mid_limits >= 0.0 {
+            "clearance".to_owned()
+        } else {
+            "interference".to_owned()
+        };
+
+        Self {
+            class,
+            upper,
+            lower,
+            mid_class,
+            mid_limits,
+        }
+    }
+}
+
+pub struct Feature {
+    pub size: Size,
+    pub tolerance: Tolerance,
+}
+
+impl Feature {
+    fn new(tolerance: Tolerance, size: Size) -> Self {
+        Self { size, tolerance }
+    }
+}
+
+pub struct Result {
+    pub fit: Fit,
+    pub hole: Feature,
+    pub shaft: Feature,
 }
 
 pub const GRADE_MAP: &[&str; 20] = &[
@@ -156,6 +250,13 @@ pub const LOWER_DEVIATIONS_A_JS: &[[i32; 11]; 30] = &[
     [3_150, -1, -1, -1, -1, 520, 290, -1, 145, -1, 38],
 ];
 
+pub fn n_round(num: f64, decimals: i32) -> f64 {
+    // Negative decimals inherit the default decimal places value
+    let power = if decimals >= 0 { decimals } else { 6 };
+    let factor = 10f64.powi(power);
+    (num * factor).round() / factor
+}
+
 pub fn get_tolerance(size: f64, deviation_str: &str, grade_str: &str) -> Option<(f64, f64)> {
     let size_rounded = size.ceil() as i32;
     let grade_id = GRADE_MAP.iter().position(|&g| g == grade_str)? + 1; // +1 to ignore size column
@@ -173,6 +274,8 @@ pub fn get_tolerance(size: f64, deviation_str: &str, grade_str: &str) -> Option<
     let tolerance = *STANDARD_TOLERANCE_GRADES[tolerance_row].get(grade_id)? as f64 / 10_000.0;
     let deviation = if deviation_str.to_uppercase() == "H" {
         0.0
+    } else if deviation_str.to_uppercase() == "JS" {
+        -tolerance / 2.0
     } else {
         *LOWER_DEVIATIONS_A_JS[deviation_row].get(deviation_id)? as f64 / 1_000.0
     };
@@ -184,49 +287,24 @@ pub fn get_tolerance(size: f64, deviation_str: &str, grade_str: &str) -> Option<
     }
 }
 
-pub fn calculate_fit(
-    basic_size: f64,
-    hole_deviation: &str,
-    hole_grade: &str,
-    shaft_deviation: &str,
-    shaft_grade: &str,
-) -> Option<FitResult> {
-    let (hole_upper, hole_lower) = get_tolerance(basic_size, hole_deviation, hole_grade)?;
-    let (shaft_upper, shaft_lower) = get_tolerance(basic_size, shaft_deviation, shaft_grade)?;
-    let (hole_middle, shaft_middle) = (
-        (hole_upper + hole_lower) / 2.0,
-        (shaft_upper + shaft_lower) / 2.0,
-    );
+pub fn calculate_fit(core: &Core) -> Option<Result> {
+    let hole_tolerance = Tolerance::new(get_tolerance(
+        core.basic_size,
+        &core.hole_deviation,
+        &core.hole_grade,
+    )?);
+    let hole_size = Size::new(core.basic_size, &hole_tolerance);
+    let hole = Feature::new(hole_tolerance, hole_size);
 
-    // let (shaft_mmc, hole_mmc) = (basic_size + hole_lower, basic_size + shaft_upper);
-    // let (hole_lmc, shaft_lmc) = (basic_size + hole_upper, basic_size + shaft_lower);
+    let shaft_tolerance = Tolerance::new(get_tolerance(
+        core.basic_size,
+        &core.shaft_deviation,
+        &core.shaft_grade,
+    )?);
+    let shaft_size = Size::new(core.basic_size, &shaft_tolerance);
+    let shaft = Feature::new(shaft_tolerance, shaft_size);
 
-    let fit_upper = hole_lower - shaft_upper;
-    let fit_lower = hole_upper - shaft_lower;
-    let fit_middle = (fit_upper + fit_lower) / 2.0;
+    let fit = Fit::new(&hole, &shaft);
 
-    let fit_type = if fit_lower > 0.0 && fit_upper > 0.0 {
-        "Clearance".to_owned()
-    } else if fit_lower < 0.0 && fit_upper < 0.0 {
-        "Interference".to_owned()
-    } else {
-        "Transition".to_owned()
-    };
-
-    // let hole_midlimits = (hole_lmc + hole_mmc) / 2.0;
-    // let shaft_midlimits = (shaft_lmc + shaft_mmc) / 2.0;
-    // let fit_midlimits = (fit_lower + fit_upper) / 2.0;
-
-    Some(FitResult {
-        fit_type,
-        fit_upper,
-        fit_middle,
-        fit_lower,
-        hole_upper,
-        hole_middle,
-        hole_lower,
-        shaft_upper,
-        shaft_middle,
-        shaft_lower,
-    })
+    Some(Result { fit, hole, shaft })
 }
