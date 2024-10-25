@@ -40,7 +40,7 @@ impl Size {
             ui.label(format!(
                 "{:.} mm ({} µm)",
                 decimal_places(self.lower, -1),
-                decimal_places(1000.0 * (self.basic - self.lower), -1)
+                decimal_places(1000.0 * (self.lower - self.basic), -1)
             ));
             ui.end_row();
 
