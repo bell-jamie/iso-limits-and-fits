@@ -1,4 +1,4 @@
-use super::utils::decimal_places;
+use super::utils::decimals;
 
 pub struct GradesDeviations {
     pub it_numbers: Vec<String>,
@@ -6,7 +6,7 @@ pub struct GradesDeviations {
     pub shaft_position_letters: Vec<String>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, serde::Deserialize, serde::Serialize)]
 pub struct Tolerance {
     pub upper: f64,
     pub lower: f64,
@@ -21,9 +21,9 @@ impl Tolerance {
         self.upper - (self.upper + self.lower) / 2.0
     }
 
-    pub fn round(&mut self, decimals: i32) {
-        self.upper = decimal_places(self.upper, decimals);
-        self.lower = decimal_places(self.lower, decimals);
+    pub fn round(&mut self, n: i32) {
+        self.upper = decimals(self.upper, n);
+        self.lower = decimals(self.lower, n);
     }
 }
 
@@ -49,6 +49,7 @@ impl GradesDeviations {
     }
 }
 
+#[derive(serde::Deserialize, serde::Serialize)]
 pub struct IsoFit {
     pub deviation: String,
     pub grade: String,
@@ -86,8 +87,10 @@ impl IsoFit {
         };
 
         if self.deviation.chars().next().unwrap().is_uppercase() {
+            // Return the tolerance for a hole
             Some(Tolerance::new(deviation + tolerance, deviation))
         } else {
+            // Return the tolerance for a shaft
             Some(Tolerance::new(-deviation, -deviation - tolerance))
         }
     }
@@ -243,15 +246,29 @@ mod tests {
 
     #[test]
     fn test_iso_fits() {
-        let test_vec = vec![(
-            IsoFit::new("H", "7").convert(10.0),
-            Some(Tolerance::new(10.015, 10.000)),
-        )];
+        let test_vec = vec![
+            (
+                IsoFit::new("H", "7").convert(10.0),
+                Some(Tolerance::new(0.015, 0.000)),
+            ),
+            (
+                IsoFit::new("js", "4").convert(5.4),
+                Some(Tolerance::new(0.002, -0.002)),
+            ),
+            (
+                IsoFit::new("H", "7").convert(52.8),
+                Some(Tolerance::new(0.030, 0.000)),
+            ),
+            (
+                IsoFit::new("g", "6").convert(52.8),
+                Some(Tolerance::new(-0.010, -0.029)),
+            ),
+        ];
 
         for test in test_vec.iter() {
             if let (Some(iso), Some(bilateral)) = test {
-                assert_eq!(iso.upper, bilateral.upper);
-                assert_eq!(iso.lower, bilateral.lower);
+                assert_eq!(decimals(iso.upper, 4), decimals(bilateral.upper, 4));
+                assert_eq!(decimals(iso.lower, 4), decimals(bilateral.lower, 4));
             }
         }
     }

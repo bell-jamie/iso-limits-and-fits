@@ -1,10 +1,10 @@
 [package]
 name = "iso_limits_and_fits"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["James Bell <jmhbell@icloud.com>"]
 edition = "2021"
 include = ["LICENSE-APACHE", "LICENSE-MIT", "**/*.rs", "Cargo.toml"]
-rust-version = "1.76"
+rust-version = "1.83"
 
 [package.metadata.docs.rs]
 all-features = true

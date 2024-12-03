@@ -4,8 +4,9 @@ use crate::sections::{
     feature::Feature,
     tolerance::{GradesDeviations, IsoFit, Tolerance},
 };
-use egui::Ui;
+use egui::{Rangef, Ui};
 
+#[derive(serde::Deserialize, serde::Serialize)]
 pub struct Input {
     pub size: f64,
     pub tolerance: Tolerance,
@@ -46,12 +47,14 @@ impl Input {
 
     pub fn show(&mut self, ui: &mut Ui, hole: bool, id: &str) -> Option<Feature> {
         let dropdowns = GradesDeviations::default();
+        let combo_width = 50.0;
+        let col_width = 50.0;
 
         ui.horizontal(|ui| {
             ui.toggle_value(&mut self.standard, "ISO");
 
             if hole {
-                ui.label("Hole :");
+                ui.label("Hole:  ");
             } else {
                 ui.label("Shaft: ");
             }
@@ -71,6 +74,7 @@ impl Input {
                 }
 
                 egui::ComboBox::from_id_salt([id, "deviation"].concat())
+                    .width(combo_width)
                     .selected_text(&self.isofit.deviation)
                     .show_ui(ui, |ui| {
                         if hole {
@@ -92,6 +96,7 @@ impl Input {
                         }
                     });
                 egui::ComboBox::from_id_salt([id, "grade"].concat())
+                    .width(combo_width)
                     .selected_text(&self.isofit.grade)
                     .show_ui(ui, |ui| {
                         for grade in &dropdowns.it_numbers {
@@ -100,24 +105,25 @@ impl Input {
                     });
                 ui.end_row();
             } else {
-                egui::Grid::new([id, "non_standard"])
+                egui::Grid::new([id, "non_standard"].concat())
                     .striped(false)
-                    .min_col_width(1.0)
+                    .min_col_width(col_width)
                     .show(ui, |ui| {
-                        ui.label("Upper");
-                        ui.add(
-                            egui::DragValue::new(&mut self.tolerance.upper)
-                                .speed(0.001)
-                                .min_decimals(3),
-                        );
-                        ui.end_row();
                         ui.label("Lower");
                         ui.add(
                             egui::DragValue::new(&mut self.tolerance.lower)
                                 .speed(0.001)
+                                .range(RangeInclusive::new(-self.size, self.tolerance.upper))
                                 .min_decimals(3),
                         );
-                        ui.end_row();
+                        // ui.end_row(); this makes it vertical
+                        ui.label("Upper");
+                        ui.add(
+                            egui::DragValue::new(&mut self.tolerance.upper)
+                                .speed(0.001)
+                                .range(RangeInclusive::new(self.tolerance.lower, 3_000.0))
+                                .min_decimals(3),
+                        );
                     });
             }
         });

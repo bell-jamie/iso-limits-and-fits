@@ -1,11 +1,14 @@
-use crate::sections::{feature::Feature, utils::decimal_places};
+use super::{feature::Feature, tolerance::Tolerance, utils::decimals};
 
+#[derive(serde::Deserialize, serde::Serialize)]
 pub struct Fit {
     pub kind: String,
     pub class: String,
     pub upper: f64,
     pub lower: f64,
     pub target: f64,
+    pub hole: Feature,
+    pub shaft: Feature,
 }
 
 impl Fit {
@@ -26,9 +29,9 @@ impl Fit {
         };
 
         let class = if target >= 0.0 {
-            "clearance".to_owned()
+            "Clearance".to_owned()
         } else {
-            "interference".to_owned()
+            "Interference".to_owned()
         };
 
         Self {
@@ -37,6 +40,8 @@ impl Fit {
             upper,
             lower,
             target,
+            hole: hole.clone(),
+            shaft: shaft.clone(),
         }
     }
 
@@ -47,10 +52,20 @@ impl Fit {
             upper: 24.0,
             lower: 0.0,
             target: 12.0,
+            hole: Feature::create(&Tolerance::new(0.015, 0.0), 10.0),
+            shaft: Feature::create(&Tolerance::new(0.0, -0.09), 10.0),
         }
     }
 
     pub fn show(&self, ui: &mut egui::Ui, id: &str) {
+        let mut units = "µm";
+        let mut scale = 1_000.0;
+
+        if self.upper.abs() >= 1.0 || self.lower.abs() >= 1.0 {
+            units = "mm";
+            scale = 1.0;
+        }
+
         ui.label(
             egui::RichText::new(format!("{} Fit", self.kind))
                 .strong()
@@ -67,26 +82,26 @@ impl Fit {
                     "Maximum"
                 }
             ));
-            ui.label(format!("{:.} µm", decimal_places(1000.0 * self.upper, -1)));
+            ui.label(format!("{:.} {units}", decimals(scale * self.upper, -1),));
             ui.end_row();
 
             if self.kind == "Transition" {
                 ui.label(format!("{}:", "Interference"));
-                ui.label(format!("{:.} µm", -decimal_places(1000.0 * self.lower, -1)));
+                ui.label(format!("{:.} {units}", -decimals(scale * self.lower, -1)));
             } else {
                 ui.label(format!("{}:", "Minimum"));
-                ui.label(format!("{:.} µm", decimal_places(1000.0 * self.lower, -1)));
+                ui.label(format!("{:.} {units}", decimals(scale * self.lower, -1)));
             }
             ui.end_row();
 
             ui.label("Mid-limits:");
             ui.label(format!(
-                "{:.} µm {}",
-                decimal_places(1000.0 * self.target, -1),
-                if self.class == "Transition" {
-                    &self.class
+                "{:.} {units} {}",
+                decimals(scale * self.target, -1),
+                if self.kind == "Transition" {
+                    format!("({})", self.class)
                 } else {
-                    ""
+                    "".to_string()
                 }
             ));
             ui.end_row();
