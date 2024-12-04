@@ -49,7 +49,7 @@ impl GradesDeviations {
     }
 }
 
-#[derive(serde::Deserialize, serde::Serialize)]
+#[derive(Clone, serde::Deserialize, serde::Serialize)]
 pub struct IsoFit {
     pub deviation: String,
     pub grade: String,
@@ -101,10 +101,14 @@ pub const GRADE_MAP: &[&str; 20] = &[
     "16", "17", "18",
 ];
 
-pub const DEVIATION_MAP: &[&str; 28] = &[
-    "a", "b", "c", "cd", "d", "e", "ef", "f", "fg", "g", "h", "js", "j", "k", "m", "n", "p", "r",
-    "s", "t", "u", "v", "x", "y", "z", "za", "zb", "zc",
+pub const DEVIATION_MAP: &[&str; 12] = &[
+    "a", "b", "c", "cd", "d", "e", "ef", "f", "fg", "g", "h", "js",
 ];
+
+// pub const DEVIATION_MAP: &[&str; 28] = &[
+//     "a", "b", "c", "cd", "d", "e", "ef", "f", "fg", "g", "h", "js", "j", "k", "m", "n", "p", "r",
+//     "s", "t", "u", "v", "x", "y", "z", "za", "zb", "zc",
+// ];
 
 // Nominal size in millimetres
 // Tolerances as 1/10th of a micrometre

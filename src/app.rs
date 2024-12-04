@@ -1,6 +1,4 @@
-use std::ops::RangeInclusive;
-
-use crate::sections::{fit::Fit, input::Input, visual_fit::VisualFit};
+use crate::sections::{feature::Feature, fit::Fit, visual_fit::VisualFit};
 use egui::Color32;
 
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
@@ -9,20 +7,22 @@ use egui::Color32;
 // if we add new fields, give them default values when deserializing old state
 
 pub struct LimitsFitsApp {
-    hole_input: Input,
-    shaft_input: Input,
+    hole: Feature,
+    shaft: Feature,
     fit: Fit,
     #[serde(skip)]
     test_visual: VisualFit,
+    sync_size: bool,
 }
 
 impl Default for LimitsFitsApp {
     fn default() -> Self {
         Self {
-            hole_input: Input::default_hole(),
-            shaft_input: Input::default_shaft(),
+            hole: Feature::default_hole(),
+            shaft: Feature::default_shaft(),
             fit: Fit::default(),
             test_visual: VisualFit::default(),
+            sync_size: true,
         }
     }
 }
@@ -70,11 +70,17 @@ impl eframe::App for LimitsFitsApp {
                 }
 
                 egui::widgets::global_theme_preference_buttons(ui);
-                ui.toggle_value(&mut self.test_visual.display, "Visual");
+
+                // Add sync button and inital sync
+                if ui.toggle_value(&mut self.sync_size, "Sync").clicked() {
+                    self.shaft.size = self.hole.size;
+                }
+
+                // ui.toggle_value(&mut self.test_visual.display, "Visual");
 
                 if ui.add(egui::Button::new("Reset")).clicked() {
-                    self.hole_input = Input::default_hole();
-                    self.shaft_input = Input::default_shaft();
+                    self.hole = Feature::default_hole();
+                    self.shaft = Feature::default_shaft();
                     self.fit = Fit::default();
                 }
             });
@@ -86,21 +92,31 @@ impl eframe::App for LimitsFitsApp {
 
             // ----------------------------------------------------------------------------
 
-            ui.label(egui::RichText::new("Inputs").strong().underline());
-            ui.add_space(5.0);
+            let (hole_size_last, shaft_size_last) = (self.hole.size, self.shaft.size);
 
-            let hole_option = self.hole_input.show(ui, true, "hole_input");
-            let shaft_option = self.shaft_input.show(ui, false, "shaft_input");
-            // if ui.toggle_value(&mut self.standard, "Lock size").clicked() sync button?
+            ui.add_space(10.0);
 
-            ui.separator();
+            self.hole.show(ui, "hole_feature");
 
-            if let (Some(hole), Some(shaft)) = (hole_option, shaft_option) {
-                self.fit = Fit::new(&hole, &shaft);
-                self.fit.show(ui, "fit_results");
-                hole.show(ui, "hole_size", "Hole");
-                shaft.show(ui, "shaft_size", "Shaft");
+            ui.add_space(10.0);
+
+            self.shaft.show(ui, "shaft_feature");
+
+            ui.add_space(10.0);
+
+            // Size sync button
+            if self.sync_size {
+                if self.hole.size != hole_size_last {
+                    self.shaft.size = self.hole.size;
+                } else if self.shaft.size != shaft_size_last {
+                    self.hole.size = self.shaft.size;
+                }
             }
+
+            // ui.separator();
+
+            self.fit = Fit::new(&self.hole, &self.shaft);
+            self.fit.show(ui, "fit_results");
 
             ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
                 powered_by_egui_and_eframe(ui);
@@ -118,8 +134,10 @@ impl eframe::App for LimitsFitsApp {
 
 fn powered_by_egui_and_eframe(ui: &mut egui::Ui) {
     ui.horizontal(|ui| {
-        let version_colour = Color32::from_rgb(0, 169, 0);
+        let changelog = String::from("Version Notes\n\n- UI restructure\n- Size sync button added\n- Visuals temporarily removed again\n- Dropdowns temporarily limited to JS/js\n");
+        let release_colour = Color32::from_rgb(0, 169, 0);
         // let version_colour = Color32::from_rgb(169, 0, 0);
+
         ui.spacing_mut().item_spacing.x = 0.0;
         ui.label("Powered by ");
         ui.hyperlink_to("egui", "https://github.com/emilk/egui");
@@ -134,18 +152,8 @@ fn powered_by_egui_and_eframe(ui: &mut egui::Ui) {
         ui.label(" v");
         ui.label(env!("CARGO_PKG_VERSION"))
             .on_hover_cursor(egui::CursorIcon::Help)
-            .on_hover_text(
-                "Tolerances currently not working past JS/js. Visualisation system currently WIP.",
-            );
-        // ui.colored_label(version_colour, " v");
-        // ui.colored_label(version_colour, env!("CARGO_PKG_VERSION"));
-        // ui.colored_label(version_colour, " alpha")
-        //     .on_hover_ui(|ui| {
-        //         ui.add(egui::Image::new(egui::include_image!(
-        //             "../assets/nervous.png"
-        //         )));
-        //     });
-        ui.colored_label(version_colour, " alpha")
+            .on_hover_text(changelog);
+        ui.colored_label(release_colour, " alpha")
             .on_hover_cursor(egui::CursorIcon::Help)
             .on_hover_text("This is an alpha release, bugs are to be expected — check your work.");
     });

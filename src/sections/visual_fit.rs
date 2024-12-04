@@ -131,7 +131,8 @@ fn zones(fit: &Fit, zero: f64) -> Vec<Polygon> {
                     ],
                     [pad.0, 1.0 - pad.1],
                 ]))
-                .fill_color(Color32::from_rgb(0, 0, 255).gamma_multiply(0.7))
+                .fill_color(Color32::BLUE)
+                // .fill_color(Color32::from_rgb(0, 0, 255).gamma_multiply(0.7))
                 .stroke(Stroke {
                     width: 0.0,
                     color: Color32::DARK_BLUE,
@@ -156,7 +157,8 @@ fn zones(fit: &Fit, zero: f64) -> Vec<Polygon> {
                     ],
                     [pad.0, pad.1],
                 ]))
-                .fill_color(Color32::from_rgb(255, 0, 0).gamma_multiply(0.7))
+                .fill_color(Color32::RED)
+                // .fill_color(Color32::from_rgb(255, 0, 0).gamma_multiply(0.7))
                 .stroke(Stroke {
                     width: 0.0,
                     color: Color32::DARK_RED,
@@ -200,11 +202,11 @@ fn generate_polygons(fit: &Fit, outline: Color32, scale: f64) -> Vec<Polygon> {
     }
 
     let mut polygons = Vec::new();
-    let od = 1.5 * fit.hole.size.basic;
-    let mut od_lmc = fit.hole.size.basic + fit.hole.tolerance.upper * scale;
-    let mut od_mmc = fit.hole.size.basic + fit.hole.tolerance.lower * scale;
-    let mut id_lmc = fit.shaft.size.basic + fit.shaft.tolerance.lower * scale;
-    let mut id_mmc = fit.shaft.size.basic + fit.shaft.tolerance.upper * scale;
+    let od = 1.5 * fit.hole.size;
+    let mut od_lmc = fit.hole.size + fit.hole.tolerance.upper * scale;
+    let mut od_mmc = fit.hole.size + fit.hole.tolerance.lower * scale;
+    let mut id_lmc = fit.shaft.size + fit.shaft.tolerance.lower * scale;
+    let mut id_mmc = fit.shaft.size + fit.shaft.tolerance.upper * scale;
     // let (fill_lmc, fill_mmc) = if fit.lower >= 0.0 {
     //     (Color32::BLUE, Color32::RED)
     // } else {
@@ -213,14 +215,14 @@ fn generate_polygons(fit: &Fit, outline: Color32, scale: f64) -> Vec<Polygon> {
 
     let (mut fill_lmc, mut fill_mmc) = (Color32::BLACK, Color32::BLACK);
 
-    if fit.hole.size.upper - fit.shaft.size.lower >= 0.0 {
+    if fit.hole.upper_limit() - fit.shaft.lower_limit() >= 0.0 {
         fill_lmc = Color32::BLUE;
     } else {
         fill_lmc = Color32::RED;
         std::mem::swap(&mut od_lmc, &mut id_lmc);
     }
 
-    if fit.hole.size.lower - fit.shaft.size.upper >= 0.0 {
+    if fit.hole.lower_limit() - fit.shaft.upper_limit() >= 0.0 {
         fill_mmc = Color32::BLUE;
     } else {
         fill_mmc = Color32::RED;

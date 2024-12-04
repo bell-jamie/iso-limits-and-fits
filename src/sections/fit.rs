@@ -13,8 +13,8 @@ pub struct Fit {
 
 impl Fit {
     pub fn new(hole: &Feature, shaft: &Feature) -> Self {
-        let mmc = hole.size.lower - shaft.size.upper;
-        let lmc = hole.size.upper - shaft.size.lower;
+        let mmc = hole.lower_limit() - shaft.upper_limit();
+        let lmc = hole.upper_limit() - shaft.lower_limit();
 
         let upper = mmc.max(lmc);
         let lower = mmc.min(lmc);
@@ -52,8 +52,8 @@ impl Fit {
             upper: 24.0,
             lower: 0.0,
             target: 12.0,
-            hole: Feature::create(&Tolerance::new(0.015, 0.0), 10.0),
-            shaft: Feature::create(&Tolerance::new(0.0, -0.09), 10.0),
+            hole: Feature::default_hole(),
+            shaft: Feature::default_shaft(),
         }
     }
 
@@ -66,11 +66,40 @@ impl Fit {
             scale = 1.0;
         }
 
-        ui.label(
-            egui::RichText::new(format!("{} Fit", self.kind))
-                .strong()
-                .underline(),
-        );
+        // This is such a bodge
+        if self.hole.standard && self.shaft.standard {
+            if self.hole.size == self.shaft.size {
+                ui.label(
+                    egui::RichText::new(format!(
+                        "{} Fit: {} {}{} / {}{}",
+                        self.kind,
+                        self.hole.size,
+                        self.hole.isofit.deviation,
+                        self.hole.isofit.grade,
+                        self.shaft.isofit.deviation,
+                        self.shaft.isofit.grade,
+                    ))
+                    .strong(),
+                );
+            } else {
+                ui.label(
+                    egui::RichText::new(format!(
+                        "{} Fit: {} {}{} / {} {}{}",
+                        self.kind,
+                        self.hole.size,
+                        self.hole.isofit.deviation,
+                        self.hole.isofit.grade,
+                        self.shaft.size,
+                        self.shaft.isofit.deviation,
+                        self.shaft.isofit.grade,
+                    ))
+                    .strong(),
+                );
+            }
+        } else {
+            ui.label(egui::RichText::new(format!("{} Fit", self.kind,)).strong());
+        }
+
         ui.add_space(5.0);
 
         egui::Grid::new(id).striped(false).show(ui, |ui| {
