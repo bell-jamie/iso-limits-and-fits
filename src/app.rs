@@ -1,5 +1,5 @@
 use crate::sections::{feature::Feature, fit::Fit, visual_fit::VisualFit};
-use egui::Color32;
+use egui::{Button, Color32};
 
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
 #[derive(serde::Deserialize, serde::Serialize)]
@@ -13,6 +13,13 @@ pub struct LimitsFitsApp {
     #[serde(skip)]
     test_visual: VisualFit,
     sync_size: bool,
+    #[serde(skip)]
+    debug: Debug,
+}
+
+pub struct Debug {
+    enabled: bool,
+    force_valid: bool,
 }
 
 impl Default for LimitsFitsApp {
@@ -23,6 +30,10 @@ impl Default for LimitsFitsApp {
             fit: Fit::default(),
             test_visual: VisualFit::default(),
             sync_size: true,
+            debug: Debug {
+                enabled: false,
+                force_valid: false,
+            },
         }
     }
 }
@@ -78,10 +89,21 @@ impl eframe::App for LimitsFitsApp {
 
                 // ui.toggle_value(&mut self.test_visual.display, "Visual");
 
-                if ui.add(egui::Button::new("Reset")).clicked() {
+                if ui.add(Button::new("Reset")).clicked() {
                     self.hole = Feature::default_hole();
                     self.shaft = Feature::default_shaft();
                     self.fit = Fit::default();
+                }
+
+                if self.debug.enabled {
+                    ui.toggle_value(&mut self.debug.force_valid, "Force Valid");
+
+                    if ui.add(Button::new("Random")).clicked() {
+                        self.sync_size = false;
+                        self.hole = Feature::random(true, self.debug.force_valid);
+                        self.shaft = Feature::random(false, self.debug.force_valid);
+                        self.fit = Fit::new(&self.hole, &self.shaft);
+                    }
                 }
             });
         });
@@ -92,15 +114,16 @@ impl eframe::App for LimitsFitsApp {
 
             // ----------------------------------------------------------------------------
 
+            // Remember feature for syncing hierachy
             let (hole_size_last, shaft_size_last) = (self.hole.size, self.shaft.size);
 
             ui.add_space(10.0);
 
-            self.hole.show(ui, "hole_feature");
+            self.hole.show(ui);
 
             ui.add_space(10.0);
 
-            self.shaft.show(ui, "shaft_feature");
+            self.shaft.show(ui);
 
             ui.add_space(10.0);
 
@@ -119,7 +142,7 @@ impl eframe::App for LimitsFitsApp {
             self.fit.show(ui, "fit_results");
 
             ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
-                powered_by_egui_and_eframe(ui);
+                signature(self, ui);
                 egui::warn_if_debug_build(ui);
             });
         });
@@ -132,9 +155,9 @@ impl eframe::App for LimitsFitsApp {
     }
 }
 
-fn powered_by_egui_and_eframe(ui: &mut egui::Ui) {
+fn signature(app: &mut LimitsFitsApp, ui: &mut egui::Ui) {
     ui.horizontal(|ui| {
-        let changelog = String::from("Version Notes\n\n- UI restructure\n- Size sync button added\n- Visuals temporarily removed again\n- Dropdowns temporarily limited to JS/js\n");
+        let changelog = String::from("Version Notes\n\n- Full ISO limits and fits tables enabled.\n- Debug mode added, click version number.\n");
         let release_colour = Color32::from_rgb(0, 169, 0);
         // let version_colour = Color32::from_rgb(169, 0, 0);
 
@@ -153,8 +176,9 @@ fn powered_by_egui_and_eframe(ui: &mut egui::Ui) {
         ui.label(env!("CARGO_PKG_VERSION"))
             .on_hover_cursor(egui::CursorIcon::Help)
             .on_hover_text(changelog);
-        ui.colored_label(release_colour, " alpha")
+        if ui.colored_label(release_colour, " alpha")
             .on_hover_cursor(egui::CursorIcon::Help)
-            .on_hover_text("This is an alpha release, bugs are to be expected — check your work.");
+            .on_hover_text("This is an alpha release, bugs are to be expected — check your work.\nClick to enable debug mode.")
+            .clicked() { app.debug.enabled = !app.debug.enabled; }
     });
 }

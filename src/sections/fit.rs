@@ -74,10 +74,10 @@ impl Fit {
                         "{} Fit: {} {}{} / {}{}",
                         self.kind,
                         self.hole.size,
-                        self.hole.isofit.deviation,
-                        self.hole.isofit.grade,
-                        self.shaft.isofit.deviation,
-                        self.shaft.isofit.grade,
+                        self.hole.iso.deviation,
+                        self.hole.iso.grade,
+                        self.shaft.iso.deviation,
+                        self.shaft.iso.grade,
                     ))
                     .strong(),
                 );
@@ -87,11 +87,11 @@ impl Fit {
                         "{} Fit: {} {}{} / {} {}{}",
                         self.kind,
                         self.hole.size,
-                        self.hole.isofit.deviation,
-                        self.hole.isofit.grade,
+                        self.hole.iso.deviation,
+                        self.hole.iso.grade,
                         self.shaft.size,
-                        self.shaft.isofit.deviation,
-                        self.shaft.isofit.grade,
+                        self.shaft.iso.deviation,
+                        self.shaft.iso.grade,
                     ))
                     .strong(),
                 );

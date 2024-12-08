@@ -1,8 +1,8 @@
 use egui::RichText;
+use rand::Rng;
 
 use super::{
-    size::Size,
-    tolerance::{GradesDeviations, IsoFit, Tolerance},
+    tolerance::{GradesDeviations, Iso, Tolerance},
     utils::decimals,
 };
 use std::ops::RangeInclusive;
@@ -12,7 +12,7 @@ pub struct Feature {
     pub hole: bool,
     pub standard: bool,
     pub size: f64,
-    pub isofit: IsoFit,
+    pub iso: Iso,
     pub tolerance: Tolerance,
 }
 
@@ -36,7 +36,7 @@ impl Feature {
             hole: true,
             standard: true,
             size: 10.0,
-            isofit: IsoFit::new("H", "7"),
+            iso: Iso::new("H", "7"),
             tolerance: Tolerance::new(0.015, 0.0),
         }
     }
@@ -46,14 +46,46 @@ impl Feature {
             hole: false,
             standard: true,
             size: 10.0,
-            isofit: IsoFit::new("h", "6"),
+            iso: Iso::new("h", "6"),
             tolerance: Tolerance::new(0.0, -0.009),
         }
     }
 
-    // pub fn from_iso() -> Self {
+    pub fn random(hole: bool, valid: bool) -> Self {
+        let mut rng = rand::thread_rng();
 
-    // }
+        loop {
+            let size = rng.gen_range(0..3_150) as f64;
+            let grades = GradesDeviations::default().it_numbers;
+            let grade = &grades[rng.gen_range(0..grades.len())];
+            let deviations = if hole {
+                GradesDeviations::default().hole_letters
+            } else {
+                GradesDeviations::default().shaft_letters
+            };
+            let deviation = &deviations[rng.gen_range(0..deviations.len())];
+            let iso = Iso::new(deviation, grade);
+
+            if valid && iso.convert(size).is_none() {
+                continue;
+            }
+
+            let tolerance = match iso.convert(size) {
+                Some(tolerance) => tolerance,
+                None => Tolerance::new(0.0, 0.0),
+            };
+
+            return Feature {
+                hole,
+                standard: true,
+                size,
+                iso,
+                tolerance,
+            };
+        }
+    }
+
+    // pub fn from_iso() -> Self {}
 
     // pub fn from_tol(hole: bool, size: f64, upper: f64, lower: f64) -> Self {
     //     Feature {
@@ -78,20 +110,15 @@ impl Feature {
         self.size + self.tolerance.lower
     }
 
-    pub fn show(&mut self, ui: &mut egui::Ui, id: &str) {
+    pub fn show(&mut self, ui: &mut egui::Ui) {
         let dropdowns = GradesDeviations::default();
         let combo_width = 50.0;
         let col_width = 50.0;
+        let id = if self.hole { "hole" } else { "shaft" };
 
         ui.horizontal(|ui| {
-            if self.hole {
-                ui.label(RichText::new("Hole:  ").strong());
-            } else {
-                ui.label(RichText::new("Shaft: ").strong());
-            }
-
+            ui.label(RichText::new(if self.hole { "Hole:  " } else { "Shaft: " }));
             ui.toggle_value(&mut self.standard, "ISO");
-
             ui.add(
                 egui::DragValue::new(&mut self.size)
                     .speed(0.1)
@@ -99,41 +126,24 @@ impl Feature {
             );
 
             if self.standard {
-                // Set tolerance values to selected ISO value
-
-                if let Some(mut tolerance) = self.isofit.convert(self.size) {
-                    tolerance.round(3);
-                    self.tolerance = tolerance;
-                }
-
-                egui::ComboBox::from_id_salt([id, "deviation"].concat())
+                egui::ComboBox::from_id_salt(format!("{}_deviation", id))
                     .width(combo_width)
-                    .selected_text(&self.isofit.deviation)
+                    .selected_text(&self.iso.deviation)
                     .show_ui(ui, |ui| {
-                        if self.hole {
-                            for letter in &dropdowns.hole_position_letters {
-                                ui.selectable_value(
-                                    &mut self.isofit.deviation,
-                                    letter.clone(),
-                                    letter,
-                                );
-                            }
+                        for letter in if self.hole {
+                            &dropdowns.hole_letters
                         } else {
-                            for letter in &dropdowns.shaft_position_letters {
-                                ui.selectable_value(
-                                    &mut self.isofit.deviation,
-                                    letter.clone(),
-                                    letter,
-                                );
-                            }
+                            &dropdowns.shaft_letters
+                        } {
+                            ui.selectable_value(&mut self.iso.deviation, letter.clone(), letter);
                         }
                     });
-                egui::ComboBox::from_id_salt([id, "grade"].concat())
+                egui::ComboBox::from_id_salt(format!("{}_grade", id))
                     .width(combo_width)
-                    .selected_text(&self.isofit.grade)
+                    .selected_text(&self.iso.grade)
                     .show_ui(ui, |ui| {
                         for grade in &dropdowns.it_numbers {
-                            ui.selectable_value(&mut self.isofit.grade, grade.clone(), grade);
+                            ui.selectable_value(&mut self.iso.grade, grade.clone(), grade);
                         }
                     });
                 ui.end_row();
@@ -160,40 +170,54 @@ impl Feature {
             }
         });
 
-        let mut units = "µm";
-        let mut scale = 1_000.0;
+        // Set tolerance values to selected ISO value (if possible)
 
-        if self.tolerance.upper.abs() >= 1.0 || self.tolerance.lower.abs() >= 1.0 {
-            units = "mm";
-            scale = 1.0;
+        if let Some(mut tolerance) = self.iso.convert(self.size) {
+            tolerance.round(-1);
+            self.tolerance = tolerance;
+
+            let mut units = "µm";
+            let mut scale = 1_000.0;
+
+            if self.tolerance.upper.abs() >= 1.0 || self.tolerance.lower.abs() >= 1.0 {
+                units = "mm";
+                scale = 1.0;
+            }
+
+            ui.add_space(5.0);
+
+            egui::Grid::new(id).striped(false).show(ui, |ui| {
+                ui.label("Maximum:");
+                ui.label(format!(
+                    "{:.} mm ({} {units})",
+                    decimals(self.upper_limit(), -1),
+                    decimals(scale * self.tolerance.upper, -1)
+                ));
+                ui.end_row();
+
+                ui.label("Minimum:");
+                ui.label(format!(
+                    "{:.} mm ({} {units})",
+                    decimals(self.lower_limit(), -1),
+                    decimals(scale * self.tolerance.lower, -1)
+                ));
+                ui.end_row();
+
+                ui.label("Mid-limits:");
+                ui.label(format!(
+                    "{:.} mm ± {:.} {units}",
+                    decimals(self.middle_limit(), -1),
+                    decimals(scale * self.tolerance.mid(), -1)
+                ));
+                ui.end_row();
+            });
+        } else {
+            ui.colored_label(
+                egui::Color32::RED,
+                "Invalid fundamental deviation",
+            )
+            .on_hover_cursor(egui::CursorIcon::Help)
+            .on_hover_text("This combination of size, deviation and tolerance grade does not exist within the ISO limits and fits system. Please refer to the ISO preferred fits.");
         }
-
-        ui.add_space(5.0);
-
-        egui::Grid::new(id).striped(false).show(ui, |ui| {
-            ui.label("Maximum:");
-            ui.label(format!(
-                "{:.} mm ({} {units})",
-                decimals(self.upper_limit(), -1),
-                decimals(scale * self.tolerance.upper, -1)
-            ));
-            ui.end_row();
-
-            ui.label("Minimum:");
-            ui.label(format!(
-                "{:.} mm ({} {units})",
-                decimals(self.lower_limit(), -1),
-                decimals(scale * self.tolerance.lower, -1)
-            ));
-            ui.end_row();
-
-            ui.label("Mid-limits:");
-            ui.label(format!(
-                "{:.} mm ± {:.} {units}",
-                decimals(self.middle_limit(), -1),
-                decimals(scale * self.tolerance.mid(), -1)
-            ));
-            ui.end_row();
-        });
     }
 }
