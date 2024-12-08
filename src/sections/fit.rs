@@ -58,13 +58,11 @@ impl Fit {
     }
 
     pub fn show(&self, ui: &mut egui::Ui, id: &str) {
-        let mut units = "µm";
-        let mut scale = 1_000.0;
-
-        if self.upper.abs() >= 1.0 || self.lower.abs() >= 1.0 {
-            units = "mm";
-            scale = 1.0;
-        }
+        let (units, scale) = if self.upper.abs() < 1.0 && self.lower.abs() < 1.0 {
+            ("µm", 1_000.0)
+        } else {
+            ("mm", 1.0)
+        };
 
         // This is such a bodge
         if self.hole.standard && self.shaft.standard {
@@ -102,37 +100,38 @@ impl Fit {
 
         ui.add_space(5.0);
 
-        egui::Grid::new(id).striped(false).show(ui, |ui| {
-            ui.label(format!(
-                "{}:",
-                if self.kind == "Transition" {
-                    "Clearance"
-                } else {
-                    "Maximum"
-                }
-            ));
-            ui.label(format!("{:.} {units}", decimals(scale * self.upper, -1),));
-            ui.end_row();
+        let mmc = self.upper.min(self.lower);
+        let lmc = self.upper.max(self.lower);
 
-            if self.kind == "Transition" {
-                ui.label(format!("{}:", "Interference"));
-                ui.label(format!("{:.} {units}", -decimals(scale * self.lower, -1)));
+        let condition = |mc: f64| {
+            if mc.is_sign_positive() {
+                "clearance"
             } else {
-                ui.label(format!("{}:", "Minimum"));
-                ui.label(format!("{:.} {units}", decimals(scale * self.lower, -1)));
+                "interference"
             }
+        };
+
+        let mmc_type = condition(mmc);
+        let lmc_type = condition(lmc);
+        let target_type = condition(self.target);
+
+        egui::Grid::new(id).striped(false).show(ui, |ui| {
+            ui.label("MMC:");
+            ui.label(format!("{:.} {units}", decimals(scale * mmc.abs(), -1)));
+            ui.label(mmc_type);
             ui.end_row();
 
-            ui.label("Mid-limits:");
+            ui.label("LMC:");
+            ui.label(format!("{:.} {units}", decimals(scale * lmc.abs(), -1)));
+            ui.label(lmc_type);
+            ui.end_row();
+
+            ui.label("Mid:");
             ui.label(format!(
-                "{:.} {units} {}",
-                decimals(scale * self.target, -1),
-                if self.kind == "Transition" {
-                    format!("({})", self.class)
-                } else {
-                    "".to_string()
-                }
+                "{:.} {units}",
+                decimals(scale * self.target.abs(), -1)
             ));
+            ui.label(target_type);
             ui.end_row();
         });
     }

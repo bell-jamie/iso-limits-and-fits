@@ -117,7 +117,7 @@ impl Feature {
         let id = if self.hole { "hole" } else { "shaft" };
 
         ui.horizontal(|ui| {
-            ui.label(RichText::new(if self.hole { "Hole:  " } else { "Shaft: " }));
+            ui.label(RichText::new(if self.hole { "Hole:  " } else { "Shaft: " }).strong());
             ui.toggle_value(&mut self.standard, "ISO");
             ui.add(
                 egui::DragValue::new(&mut self.size)
@@ -176,37 +176,46 @@ impl Feature {
             tolerance.round(-1);
             self.tolerance = tolerance;
 
-            let mut units = "µm";
-            let mut scale = 1_000.0;
-
-            if self.tolerance.upper.abs() >= 1.0 || self.tolerance.lower.abs() >= 1.0 {
-                units = "mm";
-                scale = 1.0;
-            }
+            let (units, scale) =
+                if self.tolerance.upper.abs() < 1.0 && self.tolerance.lower.abs() < 1.0 {
+                    ("µm", 1_000.0)
+                } else {
+                    ("mm", 1.0)
+                };
 
             ui.add_space(5.0);
 
             egui::Grid::new(id).striped(false).show(ui, |ui| {
-                ui.label("Maximum:");
+                ui.label("Upper:");
+                ui.label(format!("{:.} mm", decimals(self.upper_limit(), -1)));
                 ui.label(format!(
-                    "{:.} mm ({} {units})",
-                    decimals(self.upper_limit(), -1),
+                    "{}{} {units}",
+                    if self.tolerance.upper.is_sign_positive() {
+                        "+"
+                    } else {
+                        ""
+                    },
                     decimals(scale * self.tolerance.upper, -1)
                 ));
                 ui.end_row();
 
-                ui.label("Minimum:");
+                ui.label("Lower:");
+                ui.label(format!("{:.} mm", decimals(self.lower_limit(), -1)));
                 ui.label(format!(
-                    "{:.} mm ({} {units})",
-                    decimals(self.lower_limit(), -1),
+                    "{}{} {units}",
+                    if self.tolerance.lower.is_sign_positive() {
+                        "+"
+                    } else {
+                        ""
+                    },
                     decimals(scale * self.tolerance.lower, -1)
                 ));
                 ui.end_row();
 
-                ui.label("Mid-limits:");
+                ui.label("Middle:");
+                ui.label(format!("{:.} mm", decimals(self.middle_limit(), -1)));
                 ui.label(format!(
-                    "{:.} mm ± {:.} {units}",
-                    decimals(self.middle_limit(), -1),
+                    "±{:.} {units}",
                     decimals(scale * self.tolerance.mid(), -1)
                 ));
                 ui.end_row();

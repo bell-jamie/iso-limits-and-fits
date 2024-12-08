@@ -93,6 +93,7 @@ impl eframe::App for LimitsFitsApp {
                     self.hole = Feature::default_hole();
                     self.shaft = Feature::default_shaft();
                     self.fit = Fit::default();
+                    self.sync_size = true;
                 }
 
                 if self.debug.enabled {
@@ -136,8 +137,6 @@ impl eframe::App for LimitsFitsApp {
                 }
             }
 
-            // ui.separator();
-
             self.fit = Fit::new(&self.hole, &self.shaft);
             self.fit.show(ui, "fit_results");
 
@@ -157,7 +156,7 @@ impl eframe::App for LimitsFitsApp {
 
 fn signature(app: &mut LimitsFitsApp, ui: &mut egui::Ui) {
     ui.horizontal(|ui| {
-        let changelog = String::from("Version Notes\n\n- Full ISO limits and fits tables enabled.\n- Debug mode added, click version number.\n");
+        let changelog = String::from("Version Notes\n\n- Full ISO limits and fits tables enabled.\n- Debug mode added — click version number.\n- Minor UI change for fits.");
         let release_colour = Color32::from_rgb(0, 169, 0);
         // let version_colour = Color32::from_rgb(169, 0, 0);
 

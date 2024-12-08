@@ -183,7 +183,7 @@ impl Iso {
             let idx_size = DEVIATIONS_A_G.iter().position(|&s| s[0] >= size)?;
             let dev = -rtv(*DEVIATIONS_A_G[idx_size].get(idx_dev)?)?;
             if dev == -1 || ((idx_dev == 1 || idx_dev == 2) && size == 1) {
-                // This covers deviations a and a for sizes <= 1
+                // This covers deviations a and b for sizes <= 1
                 None
             } else {
                 Some(Tolerance::new(flt(dev), flt(dev - tol)))
