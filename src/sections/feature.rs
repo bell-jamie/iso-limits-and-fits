@@ -1,11 +1,11 @@
-use egui::RichText;
+use egui::{ComboBox, DragValue, Grid, RichText};
 use rand::Rng;
 
 use super::{
+    material::Material,
     tolerance::{GradesDeviations, Iso, Tolerance},
-    utils::decimals,
+    utils::{decimals, State},
 };
-use std::ops::RangeInclusive;
 
 #[derive(Clone, serde::Deserialize, serde::Serialize)]
 pub struct Feature {
@@ -14,6 +14,7 @@ pub struct Feature {
     pub size: f64,
     pub iso: Iso,
     pub tolerance: Tolerance,
+    pub mat: Material,
 }
 
 impl Feature {
@@ -38,6 +39,7 @@ impl Feature {
             size: 10.0,
             iso: Iso::new("H", "7"),
             tolerance: Tolerance::new(0.015, 0.0),
+            mat: Material::default(),
         }
     }
 
@@ -48,6 +50,7 @@ impl Feature {
             size: 10.0,
             iso: Iso::new("h", "6"),
             tolerance: Tolerance::new(0.0, -0.009),
+            mat: Material::default(),
         }
     }
 
@@ -81,6 +84,7 @@ impl Feature {
                 size,
                 iso,
                 tolerance,
+                mat: Material::default(),
             };
         }
     }
@@ -110,24 +114,26 @@ impl Feature {
         self.size + self.tolerance.lower
     }
 
-    pub fn show(&mut self, ui: &mut egui::Ui) {
+    pub fn show(&mut self, ui: &mut egui::Ui, state: &State) {
         let dropdowns = GradesDeviations::default();
-        let combo_width = 50.0;
-        let col_width = 50.0;
+        let width = 50.0;
+        let sized = [width, 18.0];
         let id = if self.hole { "hole" } else { "shaft" };
 
         ui.horizontal(|ui| {
             ui.label(RichText::new(if self.hole { "Hole:  " } else { "Shaft: " }).strong());
-            ui.toggle_value(&mut self.standard, "ISO");
+            ui.toggle_value(&mut self.standard, "ISO")
+                .on_hover_text("Toggle ISO limits");
             ui.add(
-                egui::DragValue::new(&mut self.size)
+                DragValue::new(&mut self.size)
                     .speed(0.1)
-                    .range(RangeInclusive::new(0.0, 3_150.0)),
-            );
+                    .range(0.0..=3_150.0),
+            )
+            .on_hover_text("Size");
 
             if self.standard {
-                egui::ComboBox::from_id_salt(format!("{}_deviation", id))
-                    .width(combo_width)
+                ComboBox::from_id_salt(format!("{}_deviation", id))
+                    .width(width)
                     .selected_text(&self.iso.deviation)
                     .show_ui(ui, |ui| {
                         for letter in if self.hole {
@@ -137,89 +143,61 @@ impl Feature {
                         } {
                             ui.selectable_value(&mut self.iso.deviation, letter.clone(), letter);
                         }
-                    });
-                egui::ComboBox::from_id_salt(format!("{}_grade", id))
-                    .width(combo_width)
+                    })
+                    .response
+                    .on_hover_text("Deviation");
+
+                ComboBox::from_id_salt(format!("{}_grade", id))
+                    .width(width)
                     .selected_text(&self.iso.grade)
                     .show_ui(ui, |ui| {
                         for grade in &dropdowns.it_numbers {
                             ui.selectable_value(&mut self.iso.grade, grade.clone(), grade);
                         }
-                    });
+                    })
+                    .response
+                    .on_hover_text("Grade");
                 ui.end_row();
             } else {
-                egui::Grid::new([id, "non_standard"].concat())
+                Grid::new([id, "non_standard"].concat())
                     .striped(false)
-                    .min_col_width(col_width)
+                    .min_col_width(width)
                     .show(ui, |ui| {
                         ui.add_sized(
-                            [50.0, 18.0],
-                            egui::DragValue::new(&mut self.tolerance.upper)
+                            sized,
+                            DragValue::new(&mut self.tolerance.upper)
                                 .speed(0.001)
-                                .range(RangeInclusive::new(self.tolerance.lower, 3_000.0))
+                                .range(self.tolerance.lower..=f64::MAX)
                                 .min_decimals(3),
-                        );
+                        )
+                        .on_hover_text("Upper limit");
                         ui.add_sized(
-                            [50.0, 18.0],
-                            egui::DragValue::new(&mut self.tolerance.lower)
+                            sized,
+                            DragValue::new(&mut self.tolerance.lower)
                                 .speed(0.001)
-                                .range(RangeInclusive::new(-self.size, self.tolerance.upper))
+                                .range(-self.size..=self.tolerance.upper)
                                 .min_decimals(3),
-                        );
+                        )
+                        .on_hover_text("Lower limit");
                     });
+            }
+
+            if state.thermal {
+                ui.add_sized(
+                    sized,
+                    DragValue::new(&mut self.mat.cte)
+                        .speed(0.001)
+                        .range(0.0..=f64::MAX)
+                        .min_decimals(3),
+                )
+                .on_hover_text("Thermal expansion coefficient");
             }
         });
 
-        // Set tolerance values to selected ISO value (if possible)
-
-        if let Some(mut tolerance) = self.iso.convert(self.size) {
+        if !self.standard {
+        } else if let Some(mut tolerance) = self.iso.convert(self.size) {
             tolerance.round(-1);
             self.tolerance = tolerance;
-
-            let (units, scale) =
-                if self.tolerance.upper.abs() < 1.0 && self.tolerance.lower.abs() < 1.0 {
-                    ("µm", 1_000.0)
-                } else {
-                    ("mm", 1.0)
-                };
-
-            ui.add_space(5.0);
-
-            egui::Grid::new(id).striped(false).show(ui, |ui| {
-                ui.label("Upper:");
-                ui.label(format!("{:.} mm", decimals(self.upper_limit(), -1)));
-                ui.label(format!(
-                    "{}{} {units}",
-                    if self.tolerance.upper.is_sign_positive() {
-                        "+"
-                    } else {
-                        ""
-                    },
-                    decimals(scale * self.tolerance.upper, -1)
-                ));
-                ui.end_row();
-
-                ui.label("Lower:");
-                ui.label(format!("{:.} mm", decimals(self.lower_limit(), -1)));
-                ui.label(format!(
-                    "{}{} {units}",
-                    if self.tolerance.lower.is_sign_positive() {
-                        "+"
-                    } else {
-                        ""
-                    },
-                    decimals(scale * self.tolerance.lower, -1)
-                ));
-                ui.end_row();
-
-                ui.label("Middle:");
-                ui.label(format!("{:.} mm", decimals(self.middle_limit(), -1)));
-                ui.label(format!(
-                    "±{:.} {units}",
-                    decimals(scale * self.tolerance.mid(), -1)
-                ));
-                ui.end_row();
-            });
         } else {
             ui.colored_label(
                 egui::Color32::RED,
@@ -227,6 +205,52 @@ impl Feature {
             )
             .on_hover_cursor(egui::CursorIcon::Help)
             .on_hover_text("This combination of size, deviation and tolerance grade does not exist within the ISO limits and fits system. Please refer to the ISO preferred fits.");
+            return;
         }
+
+        let (units, scale) = if self.tolerance.upper.abs() < 1.0 && self.tolerance.lower.abs() < 1.0
+        {
+            ("µm", 1_000.0)
+        } else {
+            ("mm", 1.0)
+        };
+
+        ui.add_space(5.0);
+
+        Grid::new(id).striped(false).show(ui, |ui| {
+            ui.label("Upper:");
+            ui.label(format!("{:.} mm", decimals(self.upper_limit(), -1)));
+            ui.label(format!(
+                "{}{} {units}",
+                if self.tolerance.upper.is_sign_positive() {
+                    "+"
+                } else {
+                    ""
+                },
+                decimals(scale * self.tolerance.upper, -1)
+            ));
+            ui.end_row();
+
+            ui.label("Lower:");
+            ui.label(format!("{:.} mm", decimals(self.lower_limit(), -1)));
+            ui.label(format!(
+                "{}{} {units}",
+                if self.tolerance.lower.is_sign_positive() {
+                    "+"
+                } else {
+                    ""
+                },
+                decimals(scale * self.tolerance.lower, -1)
+            ));
+            ui.end_row();
+
+            ui.label("Middle:");
+            ui.label(format!("{:.} mm", decimals(self.middle_limit(), -1)));
+            ui.label(format!(
+                "±{:.} {units}",
+                decimals(scale * self.tolerance.mid(), -1)
+            ));
+            ui.end_row();
+        });
     }
 }

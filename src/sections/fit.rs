@@ -1,4 +1,8 @@
-use super::{feature::Feature, tolerance::Tolerance, utils::decimals};
+use super::{
+    feature::Feature,
+    tolerance::Tolerance,
+    utils::{decimals, State},
+};
 
 #[derive(serde::Deserialize, serde::Serialize)]
 pub struct Fit {
@@ -57,7 +61,7 @@ impl Fit {
         }
     }
 
-    pub fn show(&self, ui: &mut egui::Ui, id: &str) {
+    pub fn show(&self, ui: &mut egui::Ui, state: &State) {
         let (units, scale) = if self.upper.abs() < 1.0 && self.lower.abs() < 1.0 {
             ("µm", 1_000.0)
         } else {
@@ -115,24 +119,26 @@ impl Fit {
         let lmc_type = condition(lmc);
         let target_type = condition(self.target);
 
-        egui::Grid::new(id).striped(false).show(ui, |ui| {
-            ui.label("MMC:");
-            ui.label(format!("{:.} {units}", decimals(scale * mmc.abs(), -1)));
-            ui.label(mmc_type);
-            ui.end_row();
+        egui::Grid::new("fit_results")
+            .striped(false)
+            .show(ui, |ui| {
+                ui.label("MMC:");
+                ui.label(format!("{:.} {units}", decimals(scale * mmc.abs(), -1)));
+                ui.label(mmc_type);
+                ui.end_row();
 
-            ui.label("LMC:");
-            ui.label(format!("{:.} {units}", decimals(scale * lmc.abs(), -1)));
-            ui.label(lmc_type);
-            ui.end_row();
+                ui.label("LMC:");
+                ui.label(format!("{:.} {units}", decimals(scale * lmc.abs(), -1)));
+                ui.label(lmc_type);
+                ui.end_row();
 
-            ui.label("Mid:");
-            ui.label(format!(
-                "{:.} {units}",
-                decimals(scale * self.target.abs(), -1)
-            ));
-            ui.label(target_type);
-            ui.end_row();
-        });
+                ui.label("Mid:");
+                ui.label(format!(
+                    "{:.} {units}",
+                    decimals(scale * self.target.abs(), -1)
+                ));
+                ui.label(target_type);
+                ui.end_row();
+            });
     }
 }

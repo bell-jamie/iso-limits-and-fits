@@ -1,4 +1,4 @@
-use crate::sections::{feature::Feature, fit::Fit, visual_fit::VisualFit};
+use crate::sections::{feature::Feature, fit::Fit, utils::State, visual_fit::VisualFit};
 use egui::{Button, Color32};
 
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
@@ -10,16 +10,7 @@ pub struct LimitsFitsApp {
     hole: Feature,
     shaft: Feature,
     fit: Fit,
-    #[serde(skip)]
-    test_visual: VisualFit,
-    sync_size: bool,
-    #[serde(skip)]
-    debug: Debug,
-}
-
-pub struct Debug {
-    enabled: bool,
-    force_valid: bool,
+    state: State,
 }
 
 impl Default for LimitsFitsApp {
@@ -28,12 +19,7 @@ impl Default for LimitsFitsApp {
             hole: Feature::default_hole(),
             shaft: Feature::default_shaft(),
             fit: Fit::default(),
-            test_visual: VisualFit::default(),
-            sync_size: true,
-            debug: Debug {
-                enabled: false,
-                force_valid: false,
-            },
+            state: State::default(),
         }
     }
 }
@@ -80,29 +66,31 @@ impl eframe::App for LimitsFitsApp {
                     ui.add_space(16.0);
                 }
 
-                egui::widgets::global_theme_preference_buttons(ui);
+                egui::widgets::global_theme_preference_switch(ui);
+
+                // ui.separator();
 
                 // Add sync button and inital sync
-                if ui.toggle_value(&mut self.sync_size, "Sync").clicked() {
+                if ui.toggle_value(&mut self.state.sync_size, "Sync").clicked() {
                     self.shaft.size = self.hole.size;
                 }
-
-                // ui.toggle_value(&mut self.test_visual.display, "Visual");
 
                 if ui.add(Button::new("Reset")).clicked() {
                     self.hole = Feature::default_hole();
                     self.shaft = Feature::default_shaft();
                     self.fit = Fit::default();
-                    self.sync_size = true;
+                    self.state.sync_size = true;
                 }
 
-                if self.debug.enabled {
-                    ui.toggle_value(&mut self.debug.force_valid, "Force Valid");
+                if self.state.debug {
+                    ui.separator();
+
+                    ui.toggle_value(&mut self.state.force_valid, "Force Valid");
 
                     if ui.add(Button::new("Random")).clicked() {
-                        self.sync_size = false;
-                        self.hole = Feature::random(true, self.debug.force_valid);
-                        self.shaft = Feature::random(false, self.debug.force_valid);
+                        self.state.sync_size = false;
+                        self.hole = Feature::random(true, self.state.force_valid);
+                        self.shaft = Feature::random(false, self.state.force_valid);
                         self.fit = Fit::new(&self.hole, &self.shaft);
                     }
                 }
@@ -120,16 +108,16 @@ impl eframe::App for LimitsFitsApp {
 
             ui.add_space(10.0);
 
-            self.hole.show(ui);
+            self.hole.show(ui, &self.state);
 
             ui.add_space(10.0);
 
-            self.shaft.show(ui);
+            self.shaft.show(ui, &self.state);
 
             ui.add_space(10.0);
 
             // Size sync button
-            if self.sync_size {
+            if self.state.sync_size {
                 if self.hole.size != hole_size_last {
                     self.shaft.size = self.hole.size;
                 } else if self.shaft.size != shaft_size_last {
@@ -138,7 +126,7 @@ impl eframe::App for LimitsFitsApp {
             }
 
             self.fit = Fit::new(&self.hole, &self.shaft);
-            self.fit.show(ui, "fit_results");
+            self.fit.show(ui, &self.state);
 
             ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
                 signature(self, ui);
@@ -146,17 +134,17 @@ impl eframe::App for LimitsFitsApp {
             });
         });
 
-        if self.test_visual.display {
-            egui::SidePanel::right("right_panel").show(ctx, |ui| {
-                self.test_visual.show(ui, &self.fit, "test_visual");
-            });
-        }
+        // if self.test_visual.display {
+        //     egui::SidePanel::right("right_panel").show(ctx, |ui| {
+        //         self.test_visual.show(ui, &self.fit, "test_visual");
+        //     });
+        // }
     }
 }
 
 fn signature(app: &mut LimitsFitsApp, ui: &mut egui::Ui) {
     ui.horizontal(|ui| {
-        let changelog = String::from("Version Notes\n\n- Full ISO limits and fits tables enabled.\n- Debug mode added — click version number.\n- Minor UI change for fits.");
+        let changelog = String::from("Version Notes\n\n5.0\n- Full ISO limits and fits tables enabled.\n- Debug mode added — click alpha.\n\n5.1\n- Minor UI change for fits.\n\n5.2\n- Fixed manual limits not working.\n- Tooltips added.\n- Header bar tweaked.");
         let release_colour = Color32::from_rgb(0, 169, 0);
         // let version_colour = Color32::from_rgb(169, 0, 0);
 
@@ -178,6 +166,6 @@ fn signature(app: &mut LimitsFitsApp, ui: &mut egui::Ui) {
         if ui.colored_label(release_colour, " alpha")
             .on_hover_cursor(egui::CursorIcon::Help)
             .on_hover_text("This is an alpha release, bugs are to be expected — check your work.\nClick to enable debug mode.")
-            .clicked() { app.debug.enabled = !app.debug.enabled; }
+            .clicked() { app.state.debug = !app.state.debug; }
     });
 }
