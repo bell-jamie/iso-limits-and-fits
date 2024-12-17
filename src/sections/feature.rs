@@ -1,4 +1,4 @@
-use egui::{ComboBox, DragValue, Grid, RichText};
+use egui::{ComboBox, DragValue, Grid, RichText, Ui};
 use rand::Rng;
 
 use super::{
@@ -102,38 +102,77 @@ impl Feature {
     //     }
     // }
 
-    pub fn upper_limit(&self) -> f64 {
-        self.size + self.tolerance.upper
+    pub fn upper_limit(&self, temp: bool) -> f64 {
+        if temp {
+            self.temp(self.size + self.tolerance.upper)
+        } else {
+            self.size + self.tolerance.upper
+        }
     }
 
-    pub fn middle_limit(&self) -> f64 {
-        (self.upper_limit() + self.lower_limit()) / 2.0
+    pub fn middle_limit(&self, temp: bool) -> f64 {
+        (self.upper_limit(temp) + self.lower_limit(temp)) / 2.0
     }
 
-    pub fn lower_limit(&self) -> f64 {
-        self.size + self.tolerance.lower
+    pub fn lower_limit(&self, temp: bool) -> f64 {
+        if temp {
+            self.temp(self.size + self.tolerance.lower)
+        } else {
+            self.size + self.tolerance.lower
+        }
     }
 
-    pub fn show(&mut self, ui: &mut egui::Ui, state: &State) {
-        let dropdowns = GradesDeviations::default();
-        let width = 50.0;
-        let sized = [width, 18.0];
+    fn temp(&self, size: f64) -> f64 {
+        let delta_temp = self.mat.temp - 20.0;
+        size * (1.0 + self.mat.cte * 0.000_001 * delta_temp)
+    }
+
+    pub fn show(&mut self, ui: &mut Ui, state: &State) {
         let id = if self.hole { "hole" } else { "shaft" };
 
+        ui.label(
+            RichText::new(if self.hole { "Hole " } else { "Shaft" })
+                .strong()
+                .size(15.0),
+        );
+        ui.add_space(5.0);
+
+        // This is the main horizontal ui layout that allows the addition of
+        // extra IO like thermal and stresses
         ui.horizontal(|ui| {
-            ui.label(RichText::new(if self.hole { "Hole:  " } else { "Shaft: " }).strong());
+            // This sets up the main IO split
+            ui.vertical(|ui| {
+                self.feature_input_ui(ui, id);
+                self.feature_output_ui(ui, id);
+            });
+
+            if state.thermal {
+                ui.separator();
+                ui.vertical(|ui| {
+                    self.thermal_input_ui(ui);
+                    self.thermal_output_ui(ui, id);
+                });
+            }
+        });
+    }
+
+    fn feature_input_ui(&mut self, ui: &mut Ui, id: &str) {
+        let dropdowns = GradesDeviations::default();
+
+        ui.horizontal(|ui| {
             ui.toggle_value(&mut self.standard, "ISO")
                 .on_hover_text("Toggle ISO limits");
-            ui.add(
+            ui.add_sized(
+                [45.0, 18.0],
                 DragValue::new(&mut self.size)
                     .speed(0.1)
                     .range(0.0..=3_150.0),
             )
-            .on_hover_text("Size");
+            .on_hover_text("Size (mm)");
 
             if self.standard {
                 ComboBox::from_id_salt(format!("{}_deviation", id))
-                    .width(width)
+                    .width(45.0)
                     .selected_text(&self.iso.deviation)
                     .show_ui(ui, |ui| {
                         for letter in if self.hole {
@@ -148,7 +187,7 @@ impl Feature {
                     .on_hover_text("Deviation");
 
                 ComboBox::from_id_salt(format!("{}_grade", id))
-                    .width(width)
+                    .width(45.0)
                     .selected_text(&self.iso.grade)
                     .show_ui(ui, |ui| {
                         for grade in &dropdowns.it_numbers {
@@ -159,41 +198,27 @@ impl Feature {
                     .on_hover_text("Grade");
                 ui.end_row();
             } else {
-                Grid::new([id, "non_standard"].concat())
-                    .striped(false)
-                    .min_col_width(width)
-                    .show(ui, |ui| {
-                        ui.add_sized(
-                            sized,
-                            DragValue::new(&mut self.tolerance.upper)
-                                .speed(0.001)
-                                .range(self.tolerance.lower..=f64::MAX)
-                                .min_decimals(3),
-                        )
-                        .on_hover_text("Upper limit");
-                        ui.add_sized(
-                            sized,
-                            DragValue::new(&mut self.tolerance.lower)
-                                .speed(0.001)
-                                .range(-self.size..=self.tolerance.upper)
-                                .min_decimals(3),
-                        )
-                        .on_hover_text("Lower limit");
-                    });
-            }
-
-            if state.thermal {
                 ui.add_sized(
-                    sized,
-                    DragValue::new(&mut self.mat.cte)
+                    [45.0, 18.0],
+                    DragValue::new(&mut self.tolerance.lower)
                         .speed(0.001)
-                        .range(0.0..=f64::MAX)
+                        .range(-self.size..=self.tolerance.upper)
                         .min_decimals(3),
                 )
-                .on_hover_text("Thermal expansion coefficient");
+                .on_hover_text("Lower limit");
+                ui.add_sized(
+                    [45.0, 18.0],
+                    DragValue::new(&mut self.tolerance.upper)
+                        .speed(0.001)
+                        .range(self.tolerance.lower..=f64::MAX)
+                        .min_decimals(3),
+                )
+                .on_hover_text("Upper limit");
             }
         });
+    }
 
+    fn feature_output_ui(&mut self, ui: &mut Ui, id: &str) {
         if !self.standard {
         } else if let Some(mut tolerance) = self.iso.convert(self.size) {
             tolerance.round(-1);
@@ -217,40 +242,126 @@ impl Feature {
 
         ui.add_space(5.0);
 
-        Grid::new(id).striped(false).show(ui, |ui| {
-            ui.label("Upper:");
-            ui.label(format!("{:.} mm", decimals(self.upper_limit(), -1)));
-            ui.label(format!(
-                "{}{} {units}",
-                if self.tolerance.upper.is_sign_positive() {
-                    "+"
-                } else {
-                    ""
-                },
-                decimals(scale * self.tolerance.upper, -1)
-            ));
-            ui.end_row();
+        Grid::new(id)
+            .striped(false)
+            .min_col_width(10.0)
+            .show(ui, |ui| {
+                ui.label("⬆")
+                    .on_hover_cursor(egui::CursorIcon::Default)
+                    .on_hover_text("Upper limit");
+                ui.label(format!("{:.}", decimals(self.upper_limit(false), -1)));
+                ui.label("mm");
+                ui.label(format!(
+                    "{}{}",
+                    if self.tolerance.upper.is_sign_positive() {
+                        "+"
+                    } else {
+                        ""
+                    },
+                    decimals(scale * self.tolerance.upper, -1)
+                ));
+                ui.label(format!("{units}"));
+                ui.end_row();
 
-            ui.label("Lower:");
-            ui.label(format!("{:.} mm", decimals(self.lower_limit(), -1)));
-            ui.label(format!(
-                "{}{} {units}",
-                if self.tolerance.lower.is_sign_positive() {
-                    "+"
-                } else {
-                    ""
-                },
-                decimals(scale * self.tolerance.lower, -1)
-            ));
-            ui.end_row();
+                // ui.label("⬌");
+                ui.label("⬍")
+                    .on_hover_cursor(egui::CursorIcon::Default)
+                    .on_hover_text("Mid-limits");
+                ui.label(format!("{:.}", decimals(self.middle_limit(false), -1)));
+                ui.label("mm");
+                ui.label(format!("±{:.}", decimals(scale * self.tolerance.mid(), -1)));
+                ui.label(format!("{units}"));
+                ui.end_row();
 
-            ui.label("Middle:");
-            ui.label(format!("{:.} mm", decimals(self.middle_limit(), -1)));
-            ui.label(format!(
-                "±{:.} {units}",
-                decimals(scale * self.tolerance.mid(), -1)
-            ));
-            ui.end_row();
+                ui.label("⬇")
+                    .on_hover_cursor(egui::CursorIcon::Default)
+                    .on_hover_text("Lower limit");
+                ui.label(format!("{:.}", decimals(self.lower_limit(false), -1)));
+                ui.label("mm");
+                ui.label(format!(
+                    "{}{}",
+                    if self.tolerance.lower.is_sign_positive() {
+                        "+"
+                    } else {
+                        ""
+                    },
+                    decimals(scale * self.tolerance.lower, -1)
+                ));
+                ui.label(format!("{units}"));
+                ui.end_row();
+            });
+    }
+
+    fn thermal_input_ui(&mut self, ui: &mut Ui) {
+        ui.horizontal(|ui| {
+            ui.add_sized(
+                [45.0, 18.0],
+                egui::DragValue::new(&mut self.mat.temp)
+                    .custom_formatter(|t, _| format!("{t} ºC"))
+                    .custom_parser(|t| {
+                        let parsed = t
+                            .chars()
+                            .filter(|c| c.is_ascii_digit() || *c == '.' || *c == '-')
+                            .collect::<String>();
+                        parsed.parse::<f64>().ok()
+                    })
+                    .speed(1.0)
+                    .range(-273.15..=1_000.0)
+                    .min_decimals(1),
+            )
+            .on_hover_text("Temperature");
+            ui.add_sized(
+                [60.0, 18.0],
+                DragValue::new(&mut self.mat.cte)
+                    .custom_formatter(|e, _| format!("{e:.1} ¹/k")) // /ºC")) ¹/k
+                    .custom_parser(|t| {
+                        let parsed = t
+                            .chars()
+                            .filter(|c| c.is_ascii_digit() || *c == '.' || *c == '-')
+                            .collect::<String>();
+                        parsed.parse::<f64>().ok()
+                    })
+                    .speed(0.1)
+                    .range(0.0..=f64::MAX)
+                    .min_decimals(1),
+            )
+            .on_hover_text("Thermal expansion coefficient");
+            if self.hole {
+                if ui
+                    .add_sized([40.0, 18.0], egui::Button::new("Oven"))
+                    .on_hover_text("Set to 170 ºC")
+                    .clicked()
+                {
+                    self.mat.temp = 170.0;
+                }
+            } else {
+                if ui
+                    .add_sized([40.0, 18.0], egui::Button::new("LN"))
+                    .on_hover_text("Set to -196 ºC")
+                    .clicked()
+                {
+                    self.mat.temp = -196.0;
+                }
+            }
         });
+    }
+
+    fn thermal_output_ui(&mut self, ui: &mut Ui, id: &str) {
+        ui.add_space(5.0);
+        Grid::new(&(id.to_owned() + "_thermal"))
+            .striped(false)
+            .show(ui, |ui| {
+                ui.label(format!("{}", decimals(self.upper_limit(true), 4)));
+                ui.label("mm");
+                ui.end_row();
+
+                ui.label(format!("{}", decimals(self.middle_limit(true), 4)));
+                ui.label("mm");
+                ui.end_row();
+
+                ui.label(format!("{}", decimals(self.lower_limit(true), 4)));
+                ui.label("mm");
+                ui.end_row();
+            });
     }
 }

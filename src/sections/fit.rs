@@ -1,6 +1,7 @@
+use egui::{Grid, RichText, Ui};
+
 use super::{
     feature::Feature,
-    tolerance::Tolerance,
     utils::{decimals, State},
 };
 
@@ -8,21 +9,18 @@ use super::{
 pub struct Fit {
     pub kind: String,
     pub class: String,
-    pub upper: f64,
-    pub lower: f64,
-    pub target: f64,
+    pub mmc: f64,
+    pub lmc: f64,
+    pub mid: f64,
     pub hole: Feature,
     pub shaft: Feature,
 }
 
 impl Fit {
     pub fn new(hole: &Feature, shaft: &Feature) -> Self {
-        let mmc = hole.lower_limit() - shaft.upper_limit();
-        let lmc = hole.upper_limit() - shaft.lower_limit();
-
-        let upper = mmc.max(lmc);
-        let lower = mmc.min(lmc);
-        let target = mmc - (mmc - lmc) / 2.0;
+        let mmc = hole.lower_limit(false) - shaft.upper_limit(false);
+        let lmc = hole.upper_limit(false) - shaft.lower_limit(false);
+        let mid = (mmc + lmc) / 2.0;
 
         let kind = if mmc >= 0.0 {
             "Clearance".to_owned()
@@ -32,7 +30,7 @@ impl Fit {
             "Transition".to_owned()
         };
 
-        let class = if target >= 0.0 {
+        let class = if mid >= 0.0 {
             "Clearance".to_owned()
         } else {
             "Interference".to_owned()
@@ -41,9 +39,9 @@ impl Fit {
         Self {
             kind,
             class,
-            upper,
-            lower,
-            target,
+            mmc,
+            lmc,
+            mid,
             hole: hole.clone(),
             shaft: shaft.clone(),
         }
@@ -53,60 +51,80 @@ impl Fit {
         Self {
             kind: "Clearance".to_owned(),
             class: "clearance".to_owned(),
-            upper: 24.0,
-            lower: 0.0,
-            target: 12.0,
+            mmc: 24.0,
+            lmc: 0.0,
+            mid: 12.0,
             hole: Feature::default_hole(),
             shaft: Feature::default_shaft(),
         }
     }
 
     pub fn show(&self, ui: &mut egui::Ui, state: &State) {
-        let (units, scale) = if self.upper.abs() < 1.0 && self.lower.abs() < 1.0 {
+        let (units, scale) = if self.mmc.abs() < 1.0 && self.lmc.abs() < 1.0 {
             ("µm", 1_000.0)
         } else {
             ("mm", 1.0)
         };
 
-        // This is such a bodge
-        if self.hole.standard && self.shaft.standard {
-            if self.hole.size == self.shaft.size {
-                ui.label(
-                    egui::RichText::new(format!(
-                        "{} Fit: {} {}{} / {}{}",
-                        self.kind,
-                        self.hole.size,
-                        self.hole.iso.deviation,
-                        self.hole.iso.grade,
-                        self.shaft.iso.deviation,
-                        self.shaft.iso.grade,
-                    ))
-                    .strong(),
-                );
-            } else {
-                ui.label(
-                    egui::RichText::new(format!(
-                        "{} Fit: {} {}{} / {} {}{}",
-                        self.kind,
-                        self.hole.size,
-                        self.hole.iso.deviation,
-                        self.hole.iso.grade,
-                        self.shaft.size,
-                        self.shaft.iso.deviation,
-                        self.shaft.iso.grade,
-                    ))
-                    .strong(),
-                );
-            }
-        } else {
-            ui.label(egui::RichText::new(format!("{} Fit", self.kind,)).strong());
-        }
-
+        self.fit_title_ui(ui);
         ui.add_space(5.0);
 
-        let mmc = self.upper.min(self.lower);
-        let lmc = self.upper.max(self.lower);
+        ui.horizontal(|ui| {
+            ui.vertical(|ui| {
+                self.fit_output_ui(ui, units, scale, state);
+            });
 
+            // if state.thermal {
+            //     ui.separator();
+            //     ui.vertical(|ui| {
+            //         self.thermal_output_ui(ui, units, scale);
+            //     });
+            // }
+        });
+    }
+
+    fn fit_title_ui(&self, ui: &mut Ui) {
+        ui.horizontal(|ui| {
+            ui.label(
+                RichText::new(format!("{} Fit", self.kind,))
+                    .strong()
+                    .size(15.0),
+            );
+
+            ui.vertical(|ui| {
+                ui.add_space(1.0);
+
+                if self.hole.standard && self.shaft.standard {
+                    let fit_text = if self.hole.size == self.shaft.size {
+                        format!(
+                            "{} {}{} / {}{}",
+                            self.hole.size,
+                            self.hole.iso.deviation,
+                            self.hole.iso.grade,
+                            self.shaft.iso.deviation,
+                            self.shaft.iso.grade,
+                        )
+                    } else {
+                        format!(
+                            "{} {}{} / {} {}{}",
+                            self.hole.size,
+                            self.hole.iso.deviation,
+                            self.hole.iso.grade,
+                            self.shaft.size,
+                            self.shaft.iso.deviation,
+                            self.shaft.iso.grade,
+                        )
+                    };
+
+                    if ui.button(fit_text.clone()).on_hover_text("Copy").clicked() {
+                        ui.output_mut(|o| o.copied_text = fit_text);
+                    }
+                }
+            });
+        });
+    }
+
+    fn fit_output_ui(&self, ui: &mut Ui, units: &str, scale: f64, state: &State) {
         let condition = |mc: f64| {
             if mc.is_sign_positive() {
                 "clearance"
@@ -115,29 +133,59 @@ impl Fit {
             }
         };
 
+        let mmc = self.hole.lower_limit(state.thermal) - self.shaft.upper_limit(state.thermal);
+        let lmc = self.hole.upper_limit(state.thermal) - self.shaft.lower_limit(state.thermal);
+        let mid = (mmc + lmc) / 2.0;
+
         let mmc_type = condition(mmc);
         let lmc_type = condition(lmc);
-        let target_type = condition(self.target);
+        let mid_type = condition(mid);
 
-        egui::Grid::new("fit_results")
+        Grid::new("fit")
             .striped(false)
+            .min_col_width(10.0)
             .show(ui, |ui| {
-                ui.label("MMC:");
-                ui.label(format!("{:.} {units}", decimals(scale * mmc.abs(), -1)));
+                ui.label("🌑")
+                    .on_hover_cursor(egui::CursorIcon::Default)
+                    .on_hover_text("Max material condition");
+                ui.label(format!("{:.} {units}", decimals(scale * mmc.abs(), 3)));
                 ui.label(mmc_type);
                 ui.end_row();
 
-                ui.label("LMC:");
-                ui.label(format!("{:.} {units}", decimals(scale * lmc.abs(), -1)));
-                ui.label(lmc_type);
+                ui.label("🌓")
+                    .on_hover_cursor(egui::CursorIcon::Default)
+                    .on_hover_text("Mid limits");
+                ui.label(format!("{:.} {units}", decimals(scale * mid.abs(), 3)));
+                ui.label(mid_type);
                 ui.end_row();
 
-                ui.label("Mid:");
+                ui.label("🌕")
+                    .on_hover_cursor(egui::CursorIcon::Default)
+                    .on_hover_text("Min material condition");
+                ui.label(format!("{:.} {units}", decimals(scale * lmc.abs(), 3)));
+                ui.label(lmc_type);
+                ui.end_row();
+            });
+    }
+
+    fn thermal_output_ui(&self, ui: &mut Ui, units: &str, scale: f64) {
+        let mmc = self.hole.lower_limit(true) - self.shaft.upper_limit(true);
+        let lmc = self.hole.upper_limit(true) - self.shaft.lower_limit(true);
+
+        Grid::new("fit_thermal")
+            .striped(false)
+            .min_col_width(10.0)
+            .show(ui, |ui| {
+                ui.label(format!("{:.} {units}", decimals(scale * mmc.abs(), -1)));
+                ui.end_row();
+
                 ui.label(format!(
                     "{:.} {units}",
-                    decimals(scale * self.target.abs(), -1)
+                    decimals(scale * self.mid.abs(), -1)
                 ));
-                ui.label(target_type);
+                ui.end_row();
+
+                ui.label(format!("{:.} {units}", decimals(scale * lmc.abs(), -1)));
                 ui.end_row();
             });
     }

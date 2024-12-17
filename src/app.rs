@@ -1,11 +1,8 @@
-use crate::sections::{feature::Feature, fit::Fit, utils::State, visual_fit::VisualFit};
+use crate::sections::{feature::Feature, fit::Fit, utils::State};
 use egui::{Button, Color32};
 
-/// We derive Deserialize/Serialize so we can persist app state on shutdown.
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)]
-// if we add new fields, give them default values when deserializing old state
-
 pub struct LimitsFitsApp {
     hole: Feature,
     shaft: Feature,
@@ -75,16 +72,19 @@ impl eframe::App for LimitsFitsApp {
                     self.shaft.size = self.hole.size;
                 }
 
+                ui.toggle_value(&mut self.state.thermal, "Thermal");
+
+                // ui.button("Stress").on_hover_text("Add me");
+
                 if ui.add(Button::new("Reset")).clicked() {
                     self.hole = Feature::default_hole();
                     self.shaft = Feature::default_shaft();
                     self.fit = Fit::default();
-                    self.state.sync_size = true;
+                    self.state = State::default();
                 }
 
                 if self.state.debug {
                     ui.separator();
-
                     ui.toggle_value(&mut self.state.force_valid, "Force Valid");
 
                     if ui.add(Button::new("Random")).clicked() {
@@ -142,9 +142,59 @@ impl eframe::App for LimitsFitsApp {
     }
 }
 
+struct ChangelogEntry {
+    version: &'static str,
+    notes: &'static [&'static str],
+}
+
+const CHANGELOG_ENTRIES: &[ChangelogEntry] = &[
+    ChangelogEntry {
+        version: "5.0",
+        notes: &[
+            "Full ISO limits and fits tables enabled.",
+            "Debug mode added — click alpha.",
+        ],
+    },
+    ChangelogEntry {
+        version: "5.1",
+        notes: &["Minor UI change for fits."],
+    },
+    ChangelogEntry {
+        version: "5.2",
+        notes: &[
+            "Fixed manual limits not working.",
+            "Tooltips added.",
+            "Header bar tweaked.",
+        ],
+    },
+    ChangelogEntry {
+        version: "6.0",
+        notes: &[
+            "Thermal fit analysis added.",
+            "General UI tweaks and new symbols.",
+        ],
+    },
+];
+
+fn format_changelog(entries: &[ChangelogEntry]) -> String {
+    let mut changelog = String::from("Version Notes\n\n");
+
+    for entry in entries {
+        changelog.push_str(&format!("{}\n", entry.version));
+        for note in entry.notes {
+            changelog.push_str(&format!("- {}\n", note));
+        }
+        changelog.push('\n');
+    }
+
+    // Pop off the last two newlines
+    changelog.pop();
+    changelog.pop();
+    changelog
+}
+
 fn signature(app: &mut LimitsFitsApp, ui: &mut egui::Ui) {
     ui.horizontal(|ui| {
-        let changelog = String::from("Version Notes\n\n5.0\n- Full ISO limits and fits tables enabled.\n- Debug mode added — click alpha.\n\n5.1\n- Minor UI change for fits.\n\n5.2\n- Fixed manual limits not working.\n- Tooltips added.\n- Header bar tweaked.");
         let release_colour = Color32::from_rgb(0, 169, 0);
         // let version_colour = Color32::from_rgb(169, 0, 0);
 
@@ -162,7 +212,7 @@ fn signature(app: &mut LimitsFitsApp, ui: &mut egui::Ui) {
         ui.label(" v");
         ui.label(env!("CARGO_PKG_VERSION"))
             .on_hover_cursor(egui::CursorIcon::Help)
-            .on_hover_text(changelog);
+            .on_hover_text(format_changelog(CHANGELOG_ENTRIES));
         if ui.colored_label(release_colour, " alpha")
             .on_hover_cursor(egui::CursorIcon::Help)
             .on_hover_text("This is an alpha release, bugs are to be expected — check your work.\nClick to enable debug mode.")
