@@ -64,8 +64,9 @@ impl eframe::App for LimitsFitsApp {
                 }
 
                 egui::widgets::global_theme_preference_switch(ui);
+                self.state.zoom.show(ui, ctx);
 
-                // ui.separator();
+                ui.separator();
 
                 // Add sync button and inital sync
                 if ui.toggle_value(&mut self.state.sync_size, "Sync").clicked() {
@@ -108,6 +109,10 @@ impl eframe::App for LimitsFitsApp {
 
             ui.add_space(10.0);
 
+            // egui::Frame::group(ui.style())
+            // .inner_margin(10.0)
+            // .rounding(10.0)
+            // .show(ui, |ui| {
             self.hole.show(ui, &self.state);
 
             ui.add_space(10.0);
@@ -115,6 +120,10 @@ impl eframe::App for LimitsFitsApp {
             self.shaft.show(ui, &self.state);
 
             ui.add_space(10.0);
+
+            self.fit = Fit::new(&self.hole, &self.shaft);
+            self.fit.show(ui, &self.state);
+            // });
 
             // Size sync button
             if self.state.sync_size {
@@ -124,9 +133,6 @@ impl eframe::App for LimitsFitsApp {
                     self.hole.size = self.shaft.size;
                 }
             }
-
-            self.fit = Fit::new(&self.hole, &self.shaft);
-            self.fit.show(ui, &self.state);
 
             ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
                 signature(self, ui);
@@ -149,18 +155,18 @@ struct ChangelogEntry {
 
 const CHANGELOG_ENTRIES: &[ChangelogEntry] = &[
     ChangelogEntry {
-        version: "5.0",
+        version: "0.5.0",
         notes: &[
             "Full ISO limits and fits tables enabled.",
             "Debug mode added — click alpha.",
         ],
     },
     ChangelogEntry {
-        version: "5.1",
+        version: "0.5.1",
         notes: &["Minor UI change for fits."],
     },
     ChangelogEntry {
-        version: "5.2",
+        version: "0.5.2",
         notes: &[
             "Fixed manual limits not working.",
             "Tooltips added.",
@@ -168,11 +174,15 @@ const CHANGELOG_ENTRIES: &[ChangelogEntry] = &[
         ],
     },
     ChangelogEntry {
-        version: "6.0",
+        version: "0.6.0",
         notes: &[
             "Thermal fit analysis added.",
             "General UI tweaks and new symbols.",
         ],
+    },
+    ChangelogEntry {
+        version: "0.6.1",
+        notes: &["Added zoom feature."],
     },
 ];
 
