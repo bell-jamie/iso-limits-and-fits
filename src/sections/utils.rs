@@ -5,6 +5,9 @@ pub struct State {
     pub debug: bool,
     pub force_valid: bool,
     pub sync_size: bool,
+    pub synced_size: f64,
+    pub sync_temp: bool,
+    pub synced_temp: f64,
     pub thermal: bool,
     pub zoom: Zoom,
 }
@@ -15,6 +18,9 @@ impl State {
             debug: false,
             force_valid: false,
             sync_size: true,
+            synced_size: 10.0,
+            sync_temp: true,
+            synced_temp: 20.0,
             thermal: false,
             zoom: Zoom::default(),
         }

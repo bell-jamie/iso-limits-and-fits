@@ -66,20 +66,40 @@ impl Fit {
             ("mm", 1.0)
         };
 
-        self.fit_title_ui(ui);
-        ui.add_space(5.0);
-
         ui.horizontal(|ui| {
             ui.vertical(|ui| {
-                self.fit_output_ui(ui, units, scale, state);
+                self.fit_title_ui(ui);
+
+                ui.add_space(5.0);
+
+                egui::Frame::group(ui.style())
+                    .inner_margin(10.0)
+                    .rounding(10.0)
+                    .show(ui, |ui| {
+                        ui.vertical(|ui| {
+                            self.fit_output_ui(ui, units, scale, false);
+                        });
+                    });
             });
 
-            // if state.thermal {
-            //     ui.separator();
-            //     ui.vertical(|ui| {
-            //         self.thermal_output_ui(ui, units, scale);
-            //     });
-            // }
+            if state.thermal {
+                ui.add_space(30.0);
+
+                ui.vertical(|ui| {
+                    ui.label(RichText::new("At Temperature").strong().size(15.0));
+
+                    ui.add_space(5.0);
+
+                    egui::Frame::group(ui.style())
+                        .inner_margin(10.0)
+                        .rounding(10.0)
+                        .show(ui, |ui| {
+                            ui.vertical(|ui| {
+                                self.fit_output_ui(ui, units, scale, true);
+                            });
+                        });
+                });
+            }
         });
     }
 
@@ -124,7 +144,9 @@ impl Fit {
         });
     }
 
-    fn fit_output_ui(&self, ui: &mut Ui, units: &str, scale: f64, state: &State) {
+    fn fit_output_ui(&self, ui: &mut Ui, units: &str, scale: f64, thermal: bool) {
+        let id = if thermal { "thermal_fit" } else { "fit" };
+
         let condition = |mc: f64| {
             if mc.is_sign_positive() {
                 "clearance"
@@ -133,15 +155,15 @@ impl Fit {
             }
         };
 
-        let mmc = self.hole.lower_limit(state.thermal) - self.shaft.upper_limit(state.thermal);
-        let lmc = self.hole.upper_limit(state.thermal) - self.shaft.lower_limit(state.thermal);
+        let mmc = self.hole.lower_limit(thermal) - self.shaft.upper_limit(thermal);
+        let lmc = self.hole.upper_limit(thermal) - self.shaft.lower_limit(thermal);
         let mid = (mmc + lmc) / 2.0;
 
         let mmc_type = condition(mmc);
         let lmc_type = condition(lmc);
         let mid_type = condition(mid);
 
-        Grid::new("fit")
+        Grid::new(id)
             .striped(false)
             .min_col_width(10.0)
             .show(ui, |ui| {
@@ -168,25 +190,25 @@ impl Fit {
             });
     }
 
-    fn thermal_output_ui(&self, ui: &mut Ui, units: &str, scale: f64) {
-        let mmc = self.hole.lower_limit(true) - self.shaft.upper_limit(true);
-        let lmc = self.hole.upper_limit(true) - self.shaft.lower_limit(true);
+    // fn thermal_output_ui(&self, ui: &mut Ui, units: &str, scale: f64) {
+    //     let mmc = self.hole.lower_limit(true) - self.shaft.upper_limit(true);
+    //     let lmc = self.hole.upper_limit(true) - self.shaft.lower_limit(true);
 
-        Grid::new("fit_thermal")
-            .striped(false)
-            .min_col_width(10.0)
-            .show(ui, |ui| {
-                ui.label(format!("{:.} {units}", decimals(scale * mmc.abs(), -1)));
-                ui.end_row();
+    //     Grid::new("fit_thermal")
+    //         .striped(false)
+    //         .min_col_width(10.0)
+    //         .show(ui, |ui| {
+    //             ui.label(format!("{:.} {units}", decimals(scale * mmc.abs(), -1)));
+    //             ui.end_row();
 
-                ui.label(format!(
-                    "{:.} {units}",
-                    decimals(scale * self.mid.abs(), -1)
-                ));
-                ui.end_row();
+    //             ui.label(format!(
+    //                 "{:.} {units}",
+    //                 decimals(scale * self.mid.abs(), -1)
+    //             ));
+    //             ui.end_row();
 
-                ui.label(format!("{:.} {units}", decimals(scale * lmc.abs(), -1)));
-                ui.end_row();
-            });
-    }
+    //             ui.label(format!("{:.} {units}", decimals(scale * lmc.abs(), -1)));
+    //             ui.end_row();
+    //         });
+    // }
 }

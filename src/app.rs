@@ -1,5 +1,5 @@
 use crate::sections::{feature::Feature, fit::Fit, utils::State};
-use egui::{Button, Color32};
+use egui::{Button, Color32, CursorIcon, RichText};
 
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)]
@@ -68,11 +68,6 @@ impl eframe::App for LimitsFitsApp {
 
                 ui.separator();
 
-                // Add sync button and inital sync
-                if ui.toggle_value(&mut self.state.sync_size, "Sync").clicked() {
-                    self.shaft.size = self.hole.size;
-                }
-
                 ui.toggle_value(&mut self.state.thermal, "Thermal");
 
                 // ui.button("Stress").on_hover_text("Add me");
@@ -86,6 +81,10 @@ impl eframe::App for LimitsFitsApp {
 
                 if self.state.debug {
                     ui.separator();
+
+                    ui.label(RichText::new("DEBUG").strong().color(Color32::RED))
+                        .on_hover_cursor(CursorIcon::default());
+
                     ui.toggle_value(&mut self.state.force_valid, "Force Valid");
 
                     if ui.add(Button::new("Random")).clicked() {
@@ -99,40 +98,20 @@ impl eframe::App for LimitsFitsApp {
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            // The central panel the region left after adding TopPanel's and SidePanel's
             ui.heading("ISO Limits and Fits Tool");
 
-            // ----------------------------------------------------------------------------
+            ui.add_space(10.0);
 
-            // Remember feature for syncing hierachy
-            let (hole_size_last, shaft_size_last) = (self.hole.size, self.shaft.size);
+            self.hole.show(ui, &mut self.state);
 
             ui.add_space(10.0);
 
-            // egui::Frame::group(ui.style())
-            // .inner_margin(10.0)
-            // .rounding(10.0)
-            // .show(ui, |ui| {
-            self.hole.show(ui, &self.state);
-
-            ui.add_space(10.0);
-
-            self.shaft.show(ui, &self.state);
+            self.shaft.show(ui, &mut self.state);
 
             ui.add_space(10.0);
 
             self.fit = Fit::new(&self.hole, &self.shaft);
             self.fit.show(ui, &self.state);
-            // });
-
-            // Size sync button
-            if self.state.sync_size {
-                if self.hole.size != hole_size_last {
-                    self.shaft.size = self.hole.size;
-                } else if self.shaft.size != shaft_size_last {
-                    self.hole.size = self.shaft.size;
-                }
-            }
 
             ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
                 signature(self, ui);
@@ -183,6 +162,14 @@ const CHANGELOG_ENTRIES: &[ChangelogEntry] = &[
     ChangelogEntry {
         version: "0.6.1",
         notes: &["Added zoom feature."],
+    },
+    ChangelogEntry {
+        version: "0.6.2",
+        notes: &[
+            "Added temperature sync.",
+            "Added separate temperature output.",
+            "UI tweaks.",
+        ],
     },
 ];
 

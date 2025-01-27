@@ -127,7 +127,7 @@ impl Feature {
         size * (1.0 + self.mat.cte * 0.000_001 * delta_temp)
     }
 
-    pub fn show(&mut self, ui: &mut Ui, state: &State) {
+    pub fn show(&mut self, ui: &mut Ui, state: &mut State) {
         let id = if self.hole { "hole" } else { "shaft" };
 
         ui.label(
@@ -137,38 +137,74 @@ impl Feature {
         );
         ui.add_space(5.0);
 
+        // egui::Frame::group(ui.style())
+        //     .inner_margin(10.0)
+        //     .rounding(10.0)
+        //     .show(ui, |ui| {
         // This is the main horizontal ui layout that allows the addition of
         // extra IO like thermal and stresses
         ui.horizontal(|ui| {
             // This sets up the main IO split
-            ui.vertical(|ui| {
-                self.feature_input_ui(ui, id);
-                self.feature_output_ui(ui, id);
-            });
+            egui::Frame::group(ui.style())
+                .inner_margin(10.0)
+                .rounding(10.0)
+                .show(ui, |ui| {
+                    ui.vertical(|ui| {
+                        self.feature_input_ui(ui, id, state);
+                        self.feature_output_ui(ui, id, false);
+                    });
+                });
 
             if state.thermal {
-                ui.separator();
-                ui.vertical(|ui| {
-                    self.thermal_input_ui(ui);
-                    self.thermal_output_ui(ui, id);
-                });
+                egui::Frame::group(ui.style())
+                    .inner_margin(10.0)
+                    .rounding(10.0)
+                    .show(ui, |ui| {
+                        ui.vertical(|ui| {
+                            self.thermal_input_ui(ui, state);
+                            self.feature_output_ui(ui, &(id.to_owned() + "_thermal"), true);
+                            // self.thermal_output_ui(ui, id);
+                        });
+                    });
             }
         });
+        // });
     }
 
-    fn feature_input_ui(&mut self, ui: &mut Ui, id: &str) {
+    fn feature_input_ui(&mut self, ui: &mut Ui, id: &str, state: &mut State) {
         let dropdowns = GradesDeviations::default();
 
         ui.horizontal(|ui| {
             ui.toggle_value(&mut self.standard, "ISO")
                 .on_hover_text("Toggle ISO limits");
-            ui.add_sized(
-                [45.0, 18.0],
-                DragValue::new(&mut self.size)
-                    .speed(0.1)
-                    .range(0.0..=3_150.0),
-            )
-            .on_hover_text("Size (mm)");
+
+            if state.sync_size {
+                self.size = state.synced_size;
+            }
+
+            ui.toggle_value(&mut state.sync_size, "🔃")
+                .on_hover_text("Sync");
+
+            let size_drag = ui
+                .add_sized(
+                    [45.0, 18.0],
+                    DragValue::new(&mut self.size)
+                        // .custom_formatter(|s, _| format!("{s} mm"))
+                        // .custom_parser(|s| {
+                        //     let to_parse = s
+                        //         .chars()
+                        //         .filter(|c| c.is_ascii_digit() || c == &'.')
+                        //         .collect::<String>();
+                        //     to_parse.parse::<f64>().ok()
+                        // })
+                        .speed(0.1)
+                        .range(0.0..=3_150.0),
+                )
+                .on_hover_text("Size");
+
+            if size_drag.changed() {
+                state.synced_size = self.size;
+            }
 
             if self.standard {
                 ComboBox::from_id_salt(format!("{}_deviation", id))
@@ -218,7 +254,7 @@ impl Feature {
         });
     }
 
-    fn feature_output_ui(&mut self, ui: &mut Ui, id: &str) {
+    fn feature_output_ui(&mut self, ui: &mut Ui, id: &str, thermal: bool) {
         if !self.standard {
         } else if let Some(mut tolerance) = self.iso.convert(self.size) {
             tolerance.round(-1);
@@ -249,67 +285,86 @@ impl Feature {
                 ui.label("⬆")
                     .on_hover_cursor(egui::CursorIcon::Default)
                     .on_hover_text("Upper limit");
-                ui.label(format!("{:.}", decimals(self.upper_limit(false), -1)));
+                ui.label(format!("{:.}", decimals(self.upper_limit(thermal), -1)));
                 ui.label("mm");
-                ui.label(format!(
-                    "{}{}",
-                    if self.tolerance.upper.is_sign_positive() {
-                        "+"
-                    } else {
-                        ""
-                    },
-                    decimals(scale * self.tolerance.upper, -1)
-                ));
-                ui.label(format!("{units}"));
+                if !thermal {
+                    ui.label(format!(
+                        "{}{}",
+                        if self.tolerance.upper.is_sign_positive() {
+                            "+"
+                        } else {
+                            ""
+                        },
+                        decimals(scale * self.tolerance.upper, -1)
+                    ));
+                    ui.label(format!("{units}"));
+                }
                 ui.end_row();
 
                 // ui.label("⬌");
                 ui.label("⬍")
                     .on_hover_cursor(egui::CursorIcon::Default)
                     .on_hover_text("Mid-limits");
-                ui.label(format!("{:.}", decimals(self.middle_limit(false), -1)));
+                ui.label(format!("{:.}", decimals(self.middle_limit(thermal), -1)));
                 ui.label("mm");
-                ui.label(format!("±{:.}", decimals(scale * self.tolerance.mid(), -1)));
-                ui.label(format!("{units}"));
+                if !thermal {
+                    ui.label(format!("±{:.}", decimals(scale * self.tolerance.mid(), -1)));
+                    ui.label(format!("{units}"));
+                }
                 ui.end_row();
 
                 ui.label("⬇")
                     .on_hover_cursor(egui::CursorIcon::Default)
                     .on_hover_text("Lower limit");
-                ui.label(format!("{:.}", decimals(self.lower_limit(false), -1)));
+                ui.label(format!("{:.}", decimals(self.lower_limit(thermal), -1)));
                 ui.label("mm");
-                ui.label(format!(
-                    "{}{}",
-                    if self.tolerance.lower.is_sign_positive() {
-                        "+"
-                    } else {
-                        ""
-                    },
-                    decimals(scale * self.tolerance.lower, -1)
-                ));
-                ui.label(format!("{units}"));
+                if !thermal {
+                    ui.label(format!(
+                        "{}{}",
+                        if self.tolerance.lower.is_sign_positive() {
+                            "+"
+                        } else {
+                            ""
+                        },
+                        decimals(scale * self.tolerance.lower, -1)
+                    ));
+                    ui.label(format!("{units}"));
+                }
                 ui.end_row();
             });
     }
 
-    fn thermal_input_ui(&mut self, ui: &mut Ui) {
+    fn thermal_input_ui(&mut self, ui: &mut Ui, state: &mut State) {
         ui.horizontal(|ui| {
-            ui.add_sized(
-                [45.0, 18.0],
-                egui::DragValue::new(&mut self.mat.temp)
-                    .custom_formatter(|t, _| format!("{t} ºC"))
-                    .custom_parser(|t| {
-                        let parsed = t
-                            .chars()
-                            .filter(|c| c.is_ascii_digit() || *c == '.' || *c == '-')
-                            .collect::<String>();
-                        parsed.parse::<f64>().ok()
-                    })
-                    .speed(1.0)
-                    .range(-273.15..=1_000.0)
-                    .min_decimals(1),
-            )
-            .on_hover_text("Temperature");
+            if state.sync_temp {
+                self.mat.temp = state.synced_temp;
+            }
+
+            ui.toggle_value(&mut state.sync_temp, "🔃")
+                .on_hover_text("Sync");
+
+            let temp_drag = ui
+                .add_sized(
+                    [45.0, 18.0],
+                    egui::DragValue::new(&mut self.mat.temp)
+                        .custom_formatter(|t, _| format!("{t} ºC"))
+                        .custom_parser(|t| {
+                            let to_parse = t
+                                .chars()
+                                .filter(|c| c.is_ascii_digit() || c == &'.' || c == &'-')
+                                .collect::<String>();
+                            to_parse.parse::<f64>().ok()
+                        })
+                        .speed(1.0)
+                        .range(-273.15..=10_000.0)
+                        .min_decimals(1),
+                )
+                .on_hover_text("Temperature");
+
+            if temp_drag.changed() {
+                state.synced_temp = self.mat.temp;
+            }
+
             ui.add_sized(
                 [60.0, 18.0],
                 DragValue::new(&mut self.mat.cte)
@@ -326,6 +381,7 @@ impl Feature {
                     .min_decimals(1),
             )
             .on_hover_text("Thermal expansion coefficient");
+
             if self.hole {
                 if ui
                     .add_sized([40.0, 18.0], egui::Button::new("Oven"))
@@ -346,22 +402,22 @@ impl Feature {
         });
     }
 
-    fn thermal_output_ui(&mut self, ui: &mut Ui, id: &str) {
-        ui.add_space(5.0);
-        Grid::new(&(id.to_owned() + "_thermal"))
-            .striped(false)
-            .show(ui, |ui| {
-                ui.label(format!("{}", decimals(self.upper_limit(true), 4)));
-                ui.label("mm");
-                ui.end_row();
+    // fn thermal_output_ui(&mut self, ui: &mut Ui, id: &str) {
+    //     ui.add_space(5.0);
+    //     Grid::new(&(id.to_owned() + "_thermal"))
+    //         .striped(false)
+    //         .show(ui, |ui| {
+    //             ui.label(format!("{}", decimals(self.upper_limit(true), 4)));
+    //             ui.label("mm");
+    //             ui.end_row();
 
-                ui.label(format!("{}", decimals(self.middle_limit(true), 4)));
-                ui.label("mm");
-                ui.end_row();
+    //             ui.label(format!("{}", decimals(self.middle_limit(true), 4)));
+    //             ui.label("mm");
+    //             ui.end_row();
 
-                ui.label(format!("{}", decimals(self.lower_limit(true), 4)));
-                ui.label("mm");
-                ui.end_row();
-            });
-    }
+    //             ui.label(format!("{}", decimals(self.lower_limit(true), 4)));
+    //             ui.label("mm");
+    //             ui.end_row();
+    //         });
+    // }
 }
