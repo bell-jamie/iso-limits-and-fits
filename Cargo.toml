@@ -1,6 +1,6 @@
 [package]
 name = "iso_limits_and_fits"
-version = "0.6.3"
+version = "0.7.0-INDEV"
 authors = ["James Bell <jmhbell@icloud.com>"]
 edition = "2021"
 include = ["LICENSE-APACHE", "LICENSE-MIT", "**/*.rs", "Cargo.toml"]

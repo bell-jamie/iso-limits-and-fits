@@ -1,45 +1,33 @@
-use egui::{ComboBox, DragValue, Grid, RichText, Ui};
+use egui::{ComboBox, DragValue, Grid, RichText, SelectableLabel, Ui};
 use rand::Rng;
 
 use super::{
     material::Material,
     tolerance::{GradesDeviations, Iso, Tolerance},
-    utils::{decimals, State},
+    utils::{check_width, decimals, State},
 };
 
 #[derive(Clone, serde::Deserialize, serde::Serialize)]
 pub struct Feature {
     pub hole: bool,
     pub standard: bool,
+    pub primary: bool,
+    pub enabled: bool,
     pub size: f64,
     pub iso: Iso,
     pub tolerance: Tolerance,
-    pub mat: Material,
 }
 
 impl Feature {
-    // pub fn new(tolerance: &Tolerance, size: &Size) -> Self {
-    //     Self {
-    //         size: size.clone(),
-    //         tolerance: tolerance.clone(),
-    //     }
-    // }
-
-    // pub fn create(tolerance: &Tolerance, basic_size: f64) -> Self {
-    //     Self {
-    //         size: Size::new(basic_size, tolerance),
-    //         tolerance: tolerance.clone(),
-    //     }
-    // }
-
     pub fn default_hole() -> Self {
         Feature {
             hole: true,
             standard: true,
+            primary: true,
+            enabled: true,
             size: 10.0,
             iso: Iso::new("H", "7"),
             tolerance: Tolerance::new(0.015, 0.0),
-            mat: Material::default(),
         }
     }
 
@@ -47,10 +35,35 @@ impl Feature {
         Feature {
             hole: false,
             standard: true,
+            primary: true,
+            enabled: true,
             size: 10.0,
             iso: Iso::new("h", "6"),
             tolerance: Tolerance::new(0.0, -0.009),
-            mat: Material::default(),
+        }
+    }
+
+    pub fn default_inner() -> Self {
+        Feature {
+            hole: true,
+            standard: true,
+            primary: false,
+            enabled: false,
+            size: 5.0,
+            iso: Iso::new("H", "12"),
+            tolerance: Tolerance::new(0.120, 0.0),
+        }
+    }
+
+    pub fn default_outer() -> Self {
+        Feature {
+            hole: false,
+            standard: true,
+            primary: false,
+            enabled: false,
+            size: 15.0,
+            iso: Iso::new("h", "12"),
+            tolerance: Tolerance::new(0.0, -0.180),
         }
     }
 
@@ -81,113 +94,96 @@ impl Feature {
             return Feature {
                 hole,
                 standard: true,
+                primary: true,
+                enabled: true,
                 size,
                 iso,
                 tolerance,
-                mat: Material::default(),
             };
         }
     }
 
-    // pub fn from_iso() -> Self {}
-
-    // pub fn from_tol(hole: bool, size: f64, upper: f64, lower: f64) -> Self {
-    //     Feature {
-    //         hole,
-    //         standard: false,
-    //         size: size,
-    //         isofit: IsoFit::new() {
-    //             deviation:
-    //         }
-    //     }
-    // }
-
-    pub fn upper_limit(&self, temp: bool) -> f64 {
-        if temp {
-            self.temp(self.size + self.tolerance.upper)
+    pub fn upper_limit(&self, mat: Option<&Material>) -> f64 {
+        if let Some(material) = mat {
+            self.temp(self.size + self.tolerance.upper, material)
         } else {
             self.size + self.tolerance.upper
         }
     }
 
-    pub fn middle_limit(&self, temp: bool) -> f64 {
-        (self.upper_limit(temp) + self.lower_limit(temp)) / 2.0
+    pub fn middle_limit(&self, mat: Option<&Material>) -> f64 {
+        (self.upper_limit(mat) + self.lower_limit(mat)) / 2.0
     }
 
-    pub fn lower_limit(&self, temp: bool) -> f64 {
-        if temp {
-            self.temp(self.size + self.tolerance.lower)
+    pub fn lower_limit(&self, mat: Option<&Material>) -> f64 {
+        if let Some(material) = mat {
+            self.temp(self.size + self.tolerance.lower, material)
         } else {
             self.size + self.tolerance.lower
         }
     }
 
-    fn temp(&self, size: f64) -> f64 {
-        let delta_temp = self.mat.temp - 20.0;
-        size * (1.0 + self.mat.cte * 0.000_001 * delta_temp)
+    fn temp(&self, size: f64, mat: &Material) -> f64 {
+        let delta_temp = mat.temp - 20.0;
+        size * (1.0 + mat.cte * 0.000_001 * delta_temp)
     }
 
-    pub fn show(&mut self, ui: &mut Ui, state: &mut State) {
-        let id = if self.hole { "hole" } else { "shaft" };
-
-        ui.label(
-            RichText::new(if self.hole { "Hole " } else { "Shaft" })
-                .strong()
-                .size(15.0),
-        );
+    pub fn show(
+        &mut self,
+        ui: &mut Ui,
+        state: &mut State,
+        mat: &mut Material,
+        id: &str,
+        compliment: &Feature,
+    ) {
         ui.add_space(5.0);
 
-        // egui::Frame::group(ui.style())
-        //     .inner_margin(10.0)
-        //     .rounding(10.0)
-        //     .show(ui, |ui| {
-        // This is the main horizontal ui layout that allows the addition of
-        // extra IO like thermal and stresses
         ui.horizontal(|ui| {
-            // This sets up the main IO split
-            egui::Frame::group(ui.style())
-                .inner_margin(10.0)
-                .rounding(10.0)
-                .show(ui, |ui| {
-                    ui.vertical(|ui| {
-                        self.feature_input_ui(ui, id, state);
-                        self.feature_output_ui(ui, id, false);
-                    });
-                });
+            ui.vertical(|ui| {
+                self.feature_input_ui(ui, id, state);
+                if self.enabled {
+                    self.feature_output_ui(ui, id, None);
+                }
+            });
 
-            if state.thermal {
-                egui::Frame::group(ui.style())
-                    .inner_margin(10.0)
-                    .rounding(10.0)
-                    .show(ui, |ui| {
-                        ui.vertical(|ui| {
-                            self.thermal_input_ui(ui, state);
-                            self.feature_output_ui(ui, &(id.to_owned() + "_thermal"), true);
-                            // self.thermal_output_ui(ui, id);
-                        });
-                    });
-            }
+            // if state.thermal {
+            //     egui::Frame::group(ui.style())
+            //         .inner_margin(10.0)
+            //         .rounding(10.0)
+            //         .show(ui, |ui| {
+            //             ui.vertical(|ui| {
+            //                 self.thermal_input_ui(ui, state, mat);
+            //                 self.feature_output_ui(ui, &(id.to_owned() + "_thermal"), Some(mat));
+            //                 // self.thermal_output_ui(ui, id);
+            //             });
+            //         });
+            // }
         });
-        // });
     }
 
     fn feature_input_ui(&mut self, ui: &mut Ui, id: &str, state: &mut State) {
         let dropdowns = GradesDeviations::default();
 
         ui.horizontal(|ui| {
-            ui.toggle_value(&mut self.standard, "ISO")
-                .on_hover_text("Toggle ISO limits");
-
-            if state.sync_size {
-                self.size = state.synced_size;
+            if ui
+                .add_sized([35.0, 18.0], SelectableLabel::new(self.standard, "ISO"))
+                .on_hover_text("Toggle ISO limits")
+                .clicked()
+            {
+                self.standard = !self.standard;
             }
 
-            ui.toggle_value(&mut state.sync_size, "🔃")
-                .on_hover_text("Sync");
+            if self.primary {
+                ui.toggle_value(&mut state.sync_size, "🔃")
+                    .on_hover_text("Sync");
+            } else {
+                ui.toggle_value(&mut self.enabled, "✔")
+                    .on_hover_text("Enable dimension");
+            }
 
-            let size_drag = ui
-                .add_sized(
-                    [45.0, 18.0],
+            let size_drag = ui.add_enabled(self.enabled, |ui: &mut Ui| {
+                ui.add_sized(
+                    [50.0, 18.0],
                     DragValue::new(&mut self.size)
                         // .custom_formatter(|s, _| format!("{s} mm"))
                         // .custom_parser(|s| {
@@ -200,61 +196,76 @@ impl Feature {
                         .speed(0.1)
                         .range(0.0..=3_150.0),
                 )
-                .on_hover_text("Size");
+                .on_hover_text("Size")
+            });
 
-            if size_drag.changed() {
+            if self.primary && size_drag.changed() {
                 state.synced_size = self.size;
             }
 
             if self.standard {
-                ComboBox::from_id_salt(format!("{}_deviation", id))
-                    .width(45.0)
-                    .selected_text(&self.iso.deviation)
-                    .show_ui(ui, |ui| {
-                        for letter in if self.hole {
-                            &dropdowns.hole_letters
-                        } else {
-                            &dropdowns.shaft_letters
-                        } {
-                            ui.selectable_value(&mut self.iso.deviation, letter.clone(), letter);
-                        }
-                    })
-                    .response
-                    .on_hover_text("Deviation");
+                ui.add_enabled(self.enabled, |ui: &mut Ui| {
+                    ComboBox::from_id_salt(format!("{}_deviation", id))
+                        .width(50.0)
+                        .selected_text(&self.iso.deviation)
+                        .show_ui(ui, |ui| {
+                            for letter in if self.hole {
+                                &dropdowns.hole_letters
+                            } else {
+                                &dropdowns.shaft_letters
+                            } {
+                                ui.selectable_value(
+                                    &mut self.iso.deviation,
+                                    letter.clone(),
+                                    letter,
+                                );
+                            }
+                        })
+                        .response
+                        .on_hover_text("Deviation")
+                });
 
-                ComboBox::from_id_salt(format!("{}_grade", id))
-                    .width(45.0)
-                    .selected_text(&self.iso.grade)
-                    .show_ui(ui, |ui| {
-                        for grade in &dropdowns.it_numbers {
-                            ui.selectable_value(&mut self.iso.grade, grade.clone(), grade);
-                        }
-                    })
-                    .response
-                    .on_hover_text("Grade");
+                ui.add_enabled(self.enabled, |ui: &mut Ui| {
+                    ComboBox::from_id_salt(format!("{}_grade", id))
+                        .width(50.0)
+                        .selected_text(&self.iso.grade)
+                        .show_ui(ui, |ui| {
+                            for grade in &dropdowns.it_numbers {
+                                ui.selectable_value(&mut self.iso.grade, grade.clone(), grade);
+                            }
+                        })
+                        .response
+                        .on_hover_text("Grade")
+                });
                 ui.end_row();
             } else {
-                ui.add_sized(
-                    [45.0, 18.0],
-                    DragValue::new(&mut self.tolerance.lower)
-                        .speed(0.001)
-                        .range(-self.size..=self.tolerance.upper)
-                        .min_decimals(3),
-                )
-                .on_hover_text("Lower limit");
-                ui.add_sized(
-                    [45.0, 18.0],
-                    DragValue::new(&mut self.tolerance.upper)
-                        .speed(0.001)
-                        .range(self.tolerance.lower..=f64::MAX)
-                        .min_decimals(3),
-                )
-                .on_hover_text("Upper limit");
+                ui.add_enabled(self.enabled, |ui: &mut Ui| {
+                    ui.add_sized(
+                        [50.0, 18.0],
+                        DragValue::new(&mut self.tolerance.lower)
+                            .speed(0.001)
+                            .range(-self.size..=self.tolerance.upper)
+                            .min_decimals(3),
+                    )
+                    .on_hover_text("Lower limit")
+                });
+                ui.add_enabled(self.enabled, |ui: &mut Ui| {
+                    ui.add_sized(
+                        [50.0, 18.0],
+                        DragValue::new(&mut self.tolerance.upper)
+                            .speed(0.001)
+                            .range(self.tolerance.lower..=f64::MAX)
+                            .min_decimals(3),
+                    )
+                    .on_hover_text("Upper limit")
+                });
             }
+
+            // check_width(ui);
         });
     }
 
-    fn feature_output_ui(&mut self, ui: &mut Ui, id: &str, thermal: bool) {
+    fn feature_output_ui(&mut self, ui: &mut Ui, id: &str, mat: Option<&Material>) {
         if !self.standard {
         } else if let Some(mut tolerance) = self.iso.convert(self.size) {
             tolerance.round(-1);
@@ -285,9 +296,9 @@ impl Feature {
                 ui.label("⬆")
                     .on_hover_cursor(egui::CursorIcon::Default)
                     .on_hover_text("Upper limit");
-                ui.label(format!("{:.}", decimals(self.upper_limit(thermal), -1)));
+                ui.label(format!("{:.}", decimals(self.upper_limit(mat), -1)));
                 ui.label("mm");
-                if !thermal {
+                if mat.is_none() {
                     ui.label(format!(
                         "{}{}",
                         if self.tolerance.upper.is_sign_positive() {
@@ -305,9 +316,9 @@ impl Feature {
                 ui.label("⬍")
                     .on_hover_cursor(egui::CursorIcon::Default)
                     .on_hover_text("Mid-limits");
-                ui.label(format!("{:.}", decimals(self.middle_limit(thermal), -1)));
+                ui.label(format!("{:.}", decimals(self.middle_limit(mat), -1)));
                 ui.label("mm");
-                if !thermal {
+                if mat.is_none() {
                     ui.label(format!("±{:.}", decimals(scale * self.tolerance.mid(), -1)));
                     ui.label(format!("{units}"));
                 }
@@ -316,9 +327,9 @@ impl Feature {
                 ui.label("⬇")
                     .on_hover_cursor(egui::CursorIcon::Default)
                     .on_hover_text("Lower limit");
-                ui.label(format!("{:.}", decimals(self.lower_limit(thermal), -1)));
+                ui.label(format!("{:.}", decimals(self.lower_limit(mat), -1)));
                 ui.label("mm");
-                if !thermal {
+                if mat.is_none() {
                     ui.label(format!(
                         "{}{}",
                         if self.tolerance.lower.is_sign_positive() {
@@ -334,10 +345,10 @@ impl Feature {
             });
     }
 
-    fn thermal_input_ui(&mut self, ui: &mut Ui, state: &mut State) {
+    fn thermal_input_ui(&mut self, ui: &mut Ui, state: &mut State, mat: &mut Material) {
         ui.horizontal(|ui| {
             if state.sync_temp {
-                self.mat.temp = state.synced_temp;
+                mat.temp = state.synced_temp;
             }
 
             ui.toggle_value(&mut state.sync_temp, "🔃")
@@ -346,7 +357,7 @@ impl Feature {
             let temp_drag = ui
                 .add_sized(
                     [45.0, 18.0],
-                    egui::DragValue::new(&mut self.mat.temp)
+                    egui::DragValue::new(&mut mat.temp)
                         .custom_formatter(|t, _| format!("{t} ºC"))
                         .custom_parser(|t| {
                             let to_parse = t
@@ -362,12 +373,12 @@ impl Feature {
                 .on_hover_text("Temperature");
 
             if temp_drag.changed() {
-                state.synced_temp = self.mat.temp;
+                state.synced_temp = mat.temp;
             }
 
             ui.add_sized(
                 [60.0, 18.0],
-                DragValue::new(&mut self.mat.cte)
+                DragValue::new(&mut mat.cte)
                     .custom_formatter(|e, _| format!("{e:.1} ¹/k")) // /ºC")) ¹/k
                     .custom_parser(|t| {
                         let parsed = t
@@ -388,7 +399,7 @@ impl Feature {
                     .on_hover_text("Set to 170 ºC")
                     .clicked()
                 {
-                    self.mat.temp = 170.0;
+                    mat.temp = 170.0;
                 }
             } else {
                 if ui
@@ -396,7 +407,7 @@ impl Feature {
                     .on_hover_text("Set to -196 ºC")
                     .clicked()
                 {
-                    self.mat.temp = -196.0;
+                    mat.temp = -196.0;
                 }
             }
         });

@@ -1,21 +1,19 @@
-use crate::sections::{feature::Feature, fit::Fit, utils::State};
+use crate::modules::{component::Component, feature::Feature, fit::Fit, plot, utils::State};
 use egui::{Button, Color32, CursorIcon, RichText};
 
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)]
 pub struct LimitsFitsApp {
-    hole: Feature,
-    shaft: Feature,
-    fit: Fit,
+    hub: Component,
+    shaft: Component,
     state: State,
 }
 
 impl Default for LimitsFitsApp {
     fn default() -> Self {
         Self {
-            hole: Feature::default_hole(),
-            shaft: Feature::default_shaft(),
-            fit: Fit::default(),
+            hub: Component::default_hub(),
+            shaft: Component::default_shaft(),
             state: State::default(),
         }
     }
@@ -68,14 +66,15 @@ impl eframe::App for LimitsFitsApp {
 
                 ui.separator();
 
-                ui.toggle_value(&mut self.state.thermal, "Thermal");
+                ui.toggle_value(&mut self.state.advanced, "Advanced");
+                // ui.toggle_value(&mut self.state.thermal, "Thermal");
+                // ui.toggle_value(&mut self.state.interference, "Inteference");
 
                 // ui.button("Stress").on_hover_text("Add me");
 
                 if ui.add(Button::new("Reset")).clicked() {
-                    self.hole = Feature::default_hole();
-                    self.shaft = Feature::default_shaft();
-                    self.fit = Fit::default();
+                    self.hub = Component::default_hub();
+                    self.shaft = Component::default_shaft();
                     self.state = State::default();
                 }
 
@@ -87,12 +86,12 @@ impl eframe::App for LimitsFitsApp {
 
                     ui.toggle_value(&mut self.state.force_valid, "Force Valid");
 
-                    if ui.add(Button::new("Random")).clicked() {
-                        self.state.sync_size = false;
-                        self.hole = Feature::random(true, self.state.force_valid);
-                        self.shaft = Feature::random(false, self.state.force_valid);
-                        self.fit = Fit::new(&self.hole, &self.shaft);
-                    }
+                    // if ui.add(Button::new("Random")).clicked() {
+                    //     self.state.sync_size = false;
+                    //     self.hole = Feature::random(true, self.state.force_valid);
+                    //     self.shaft = Feature::random(false, self.state.force_valid);
+                    //     self.fit = Fit::new(&self.hole, &self.shaft);
+                    // }
                 }
             });
         });
@@ -100,18 +99,57 @@ impl eframe::App for LimitsFitsApp {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.heading("ISO Limits and Fits Tool");
 
-            ui.add_space(10.0);
-
-            self.hole.show(ui, &mut self.state);
-
-            ui.add_space(10.0);
-
-            self.shaft.show(ui, &mut self.state);
+            // Maybe the material feature button shouldn't be part of the enum and instead should be a toggle?
+            // This would mean that it could keep displaying the info
+            // Orrr maybe just all the information gets spat out at the end in a spreadsheet style thing
 
             ui.add_space(10.0);
 
-            self.fit = Fit::new(&self.hole, &self.shaft);
-            self.fit.show(ui, &self.state);
+            if self.state.advanced {
+                ui.horizontal(|ui| {
+                    self.hub.show(ui, &mut self.state);
+
+                    ui.add_space(10.0);
+
+                    self.shaft.show(ui, &mut self.state);
+                });
+
+                ui.add_space(10.0);
+
+                plot::side_by_side(ui, &self.hub, &self.shaft);
+
+                ui.add_space(10.0);
+
+                let fit = Fit::new(&self.hub, &self.shaft);
+                fit.show(ui, &self.state);
+            } else {
+                // Simple mode
+                self.hub.show(ui, &mut self.state);
+
+                ui.add_space(10.0);
+
+                self.shaft.show(ui, &mut self.state);
+
+                ui.add_space(10.0);
+
+                let fit = Fit::new(&self.hub, &self.shaft);
+                fit.show(ui, &self.state);
+            }
+
+            // ui.add_space(10.0);
+
+            // ui.horizontal(|ui| {
+            //     self.hub.show(ui, &mut self.state);
+
+            //     ui.add_space(10.0);
+
+            //     self.shaft.show(ui, &mut self.state);
+            // });
+
+            // ui.add_space(10.0);
+
+            // let fit = Fit::new(&self.hub, &self.shaft);
+            // fit.show(ui, &self.state);
 
             ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
                 signature(self, ui);
@@ -173,8 +211,14 @@ const CHANGELOG_ENTRIES: &[ChangelogEntry] = &[
     },
     ChangelogEntry {
         version: "0.6.3",
+        notes: &["Soroush quickfix to lookup table."],
+    },
+    ChangelogEntry {
+        version: "0.7.0",
         notes: &[
-            "Soroush quickfix to lookup table.",
+            "Simple mode and advanced mode.",
+            "Interference stresses",
+            "Zoom feature tweaked.",
         ],
     },
 ];
