@@ -171,6 +171,12 @@ const CHANGELOG_ENTRIES: &[ChangelogEntry] = &[
             "UI tweaks.",
         ],
     },
+    ChangelogEntry {
+        version: "0.6.3",
+        notes: &[
+            "Soroush quickfix to lookup table"],
+        ],
+    },
 ];
 
 fn format_changelog(entries: &[ChangelogEntry]) -> String {
@@ -212,7 +218,7 @@ fn signature(app: &mut LimitsFitsApp, ui: &mut egui::Ui) {
             .on_hover_text(format_changelog(CHANGELOG_ENTRIES));
         if ui.colored_label(release_colour, " alpha")
             .on_hover_cursor(egui::CursorIcon::Help)
-            .on_hover_text("This is an alpha release, bugs are to be expected — check your work.\nClick to enable debug mode.")
+            .on_hover_text("This is an alpha release, bugs are to be expected — check your work (like Soroush does).\nClick to enable debug mode.")
             .clicked() { app.state.debug = !app.state.debug; }
     });
 }
