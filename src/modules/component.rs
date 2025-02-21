@@ -1,14 +1,5 @@
-use super::{
-    feature::Feature,
-    material::Material,
-    plot::{
-        plot_arrow_leader, plot_centre_mark, plot_circle, plot_diameter_limits,
-        plot_diameter_symbol,
-    },
-    utils::{check_width, State},
-};
-use egui::{vec2, Color32, Frame, RichText, SelectableLabel, Stroke, Ui};
-use egui_plot::{Plot, PlotPoints, Polygon};
+use super::{feature::Feature, material::Material, utils::State};
+use egui::{Frame, RichText, SelectableLabel, Ui};
 
 #[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum Focus {
@@ -123,20 +114,14 @@ impl Component {
                     }
 
                     match self.focus {
-                        Focus::Inner => self.inner_diameter.show(
-                            ui,
-                            state,
-                            &mut self.mat,
-                            &self.name,
-                            &self.outer_diameter,
-                        ),
-                        Focus::Outer => self.outer_diameter.show(
-                            ui,
-                            state,
-                            &mut self.mat,
-                            &self.name,
-                            &self.inner_diameter,
-                        ),
+                        Focus::Inner => {
+                            self.inner_diameter
+                                .show(ui, state, &self.name, &self.outer_diameter)
+                        }
+                        Focus::Outer => {
+                            self.outer_diameter
+                                .show(ui, state, &self.name, &self.inner_diameter)
+                        }
                         Focus::Material => self.mat.input(ui, &self.name),
                     }
 

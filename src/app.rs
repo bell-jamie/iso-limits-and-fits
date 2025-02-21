@@ -1,4 +1,4 @@
-use crate::modules::{component::Component, feature::Feature, fit::Fit, plot, utils::State};
+use crate::modules::{component::Component, fit::Fit, plot, utils::State};
 use egui::{Button, Color32, CursorIcon, RichText};
 
 #[derive(serde::Deserialize, serde::Serialize)]

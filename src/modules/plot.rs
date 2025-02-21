@@ -4,27 +4,38 @@ use egui_plot::{Line, Plot, PlotPoint, PlotPoints, PlotUi, Polygon, Text};
 use super::{
     component::Component,
     feature::Feature,
-    utils::{dynamic_precision, text_width},
+    geometry::Point,
+    geometry::{Rectangle, Segment},
+    utils::text_width,
 };
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct PlotStyle {
     scale: f64,
-    line_width: f32,
-    line_colour: Color32,
-    fill_colour: Color32,
+    width: f32,
+    colour: Color32,
+    fill: Color32,
 }
 
-impl PlotStyle {
-    pub fn default() -> Self {
-        PlotStyle {
-            scale: 1.0,
-            line_width: 1.0,
-            line_colour: Color32::DARK_GRAY,
-            fill_colour: Color32::TRANSPARENT,
-        }
-    }
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+pub struct HatchStyle {
+    angle: f64,
+    spacing: f64,
+    padding: f64,
+    width: f32,
+    colour: Color32,
 }
+
+// impl PlotStyle {
+//     pub fn default() -> Self {
+//         PlotStyle {
+//             scale: 1.0,
+//             line_width: 1.0,
+//             line_colour: Color32::DARK_GRAY,
+//             fill_colour: Color32::TRANSPARENT,
+//         }
+//     }
+// }
 
 // Must be even
 const RESOLUTION: usize = 1_000;
@@ -36,9 +47,25 @@ pub fn side_by_side(ui: &mut Ui, left_component: &Component, right_component: &C
         Color32::DARK_GRAY
     };
 
-    let centre = [0.0; 2];
-    let scale = 1.0;
+    // let centre = [0.0; 2];
+    // let scale = 1.0;
     let plot_name = "bruh";
+
+    // let scale = 10.0 / left_component.outer_diameter.upper_limit(None).max(left_component.)
+
+    let scale = {
+        let mut divisor = 1.0f64;
+
+        for component in [left_component, right_component] {
+            if component.outer_diameter.enabled {
+                divisor = divisor.max(component.outer_diameter.size);
+            } else {
+                divisor = divisor.max(component.inner_diameter.size);
+            }
+        }
+
+        divisor / 15.0
+    };
 
     Frame::group(ui.style())
         .inner_margin(10.0)
@@ -61,29 +88,50 @@ pub fn side_by_side(ui: &mut Ui, left_component: &Component, right_component: &C
                 .allow_boxed_zoom(false)
                 .show(ui, |ui| {
                     let line_style = PlotStyle {
-                        scale: 1.0,
-                        line_width: 1.0,
-                        line_colour: outline_colour,
-                        fill_colour: Color32::TRANSPARENT,
+                        scale,
+                        width: 1.0,
+                        colour: outline_colour,
+                        fill: Color32::TRANSPARENT,
                     };
                     let annotate_style = PlotStyle {
-                        scale: 1.0,
-                        line_width: 1.5,
-                        line_colour: outline_colour,
-                        fill_colour: Color32::TRANSPARENT,
+                        scale,
+                        width: 1.5,
+                        colour: outline_colour,
+                        fill: Color32::TRANSPARENT,
+                    };
+                    let hatch_style = HatchStyle {
+                        angle: 45.0,
+                        spacing: 1.8,
+                        padding: 0.25,
+                        width: 0.8,
+                        colour: outline_colour,
                     };
 
                     end_view(
                         ui,
                         left_component,
-                        [-15.0, 0.0],
+                        false,
+                        [1.5 * -15.0 * scale, 0.0],
                         &line_style,
                         &annotate_style,
                     );
+
+                    centre_view(
+                        ui,
+                        1.0,
+                        left_component,
+                        right_component,
+                        [0.0, 0.0],
+                        &line_style,
+                        &annotate_style,
+                        &hatch_style,
+                    );
+
                     end_view(
                         ui,
                         right_component,
-                        [15.0, 0.0],
+                        true,
+                        [1.5 * 15.0 * scale, 0.0],
                         &line_style,
                         &annotate_style,
                     );
@@ -94,47 +142,170 @@ pub fn side_by_side(ui: &mut Ui, left_component: &Component, right_component: &C
 pub fn end_view(
     ui: &mut PlotUi,
     component: &Component,
+    right: bool,
     centre: [f64; 2],
     line_style: &PlotStyle,
     annotate_style: &PlotStyle,
 ) {
-    // Outer circle
-    plot_circle(ui, line_style, centre, component.outer_diameter.size);
+    let mut centre_size = 0.0f64;
 
-    // Inner circle
-    plot_circle(ui, line_style, centre, component.inner_diameter.size);
+    if component.outer_diameter.enabled {
+        // Outer circle
+        plot_circle(ui, line_style, centre, component.outer_diameter.size);
+
+        // Outer diameter dimension
+        plot_diameter_limits(
+            ui,
+            annotate_style,
+            centre,
+            &component.outer_diameter,
+            if right { 60.0 } else { 180.0 - 60.0 },
+            5.0,
+        );
+
+        centre_size = centre_size.max(component.outer_diameter.size);
+    }
+
+    if component.inner_diameter.enabled {
+        // Inner circle
+        plot_circle(ui, line_style, centre, component.inner_diameter.size);
+
+        // Inner diameter dimension
+        plot_diameter_limits(
+            ui,
+            annotate_style,
+            centre,
+            &component.inner_diameter,
+            if right { -60.0 } else { 60.0 - 180.0 },
+            5.0,
+        );
+
+        centre_size = centre_size.max(component.inner_diameter.size);
+    }
 
     // Centre mark
-    plot_centre_mark(
-        ui,
-        line_style,
-        centre,
-        component
-            .inner_diameter
-            .size
-            .max(component.outer_diameter.size),
-        0.0,
-    );
+    plot_centre_mark(ui, line_style, centre, centre_size, 0.0);
+}
 
-    // Outer diameter dimension
-    plot_diameter_limits(
-        ui,
-        annotate_style,
-        centre,
-        &component.outer_diameter,
-        110.0,
-        5.0,
-    );
+pub fn centre_view(
+    ui: &mut PlotUi,
+    scale: f64,
+    left_component: &Component,
+    right_component: &Component,
+    centre: [f64; 2],
+    line_style: &PlotStyle,
+    annotate_style: &PlotStyle,
+    hatch_style: &HatchStyle,
+) {
+    // Aspect ratio will be 1:1 for length to height
+    let right = if left_component.outer_diameter.enabled {
+        0.5 * left_component.outer_diameter.size
+    } else {
+        0.5 * left_component.inner_diameter.size
+    };
+    let left = -right;
 
-    // Inner diameter dimension
-    plot_diameter_limits(
-        ui,
-        annotate_style,
-        centre,
-        &component.inner_diameter,
-        70.0,
-        5.0,
-    );
+    if right_component.inner_diameter.enabled {
+        let upper = scale * right_component.outer_diameter.size / 2.0;
+        let lower = scale * right_component.inner_diameter.size / 2.0;
+
+        let mut p1 = Point::new(left, upper);
+        let mut p2 = Point::new(right, lower);
+
+        plot_hatched_section(ui, scale, line_style, hatch_style, &p1, &p2); // upper rect
+
+        p1.mirror_in_x();
+        p2.mirror_in_x();
+
+        plot_hatched_section(ui, scale, line_style, hatch_style, &p1, &p2); // lower rect
+    } else {
+        let upper = scale * right_component.outer_diameter.size / 2.0;
+        let lower = -upper;
+
+        let p1 = Point::new(left, upper);
+        let p2 = Point::new(right, lower);
+
+        plot_hatched_section(ui, scale, line_style, hatch_style, &p1, &p2);
+    }
+
+    let mut hatch_style = hatch_style.clone();
+    hatch_style.angle = -hatch_style.angle;
+
+    if left_component.outer_diameter.enabled {
+        let upper = scale * left_component.outer_diameter.size / 2.0;
+        let lower = scale * left_component.inner_diameter.size / 2.0;
+
+        let mut p1 = Point::new(left, upper);
+        let mut p2 = Point::new(right, lower);
+
+        plot_hatched_section(ui, scale, line_style, &hatch_style, &p1, &p2); // upper rect
+
+        p1.mirror_in_x();
+        p2.mirror_in_x();
+
+        plot_hatched_section(ui, scale, line_style, &hatch_style, &p1, &p2); // lower rect
+    }
+
+    plot_centreline(ui, line_style, centre, right, 0.0);
+}
+
+pub fn plot_hatched_section(
+    ui: &mut PlotUi,
+    scale: f64,
+    line_style: &PlotStyle,
+    hatch_style: &HatchStyle,
+    p1: &Point,
+    p2: &Point,
+) {
+    let centroid = Segment::from(p1, p2).midpoint().to_arr();
+    let pad = hatch_style.padding;
+    let mut outline_points = Rectangle::from(p1, p2).to_vec();
+
+    scale_points(&mut outline_points, centroid, scale);
+
+    let section = Polygon::new(PlotPoints::from(outline_points))
+        .fill_color(Color32::TRANSPARENT)
+        .stroke(Stroke {
+            width: line_style.width,
+            color: line_style.colour,
+        });
+
+    ui.polygon(section);
+
+    let p3 = Point::new(p1.x + pad, p1.y - pad);
+    let p4 = Point::new(p1.x - pad, p1.y + pad);
+
+    let mut hatch_points = Rectangle::from(&p3, &p4).to_vec();
+
+    scale_points(&mut hatch_points, centroid, scale);
+
+    let hatch_bounding_box = Polygon::new(PlotPoints::from(hatch_points))
+        .fill_color(Color32::RED)
+        .stroke(Stroke {
+            width: line_style.width,
+            color: Color32::TRANSPARENT,
+        });
+
+    // ui.polygon(hatch_bounding_box);
+
+    // This is the custom geometry driven section
+    let mut anchor = p3.clone();
+    anchor.x += 0.01; // fiddle to stop FP errors
+    let mut hatch = Segment::from_point_angle(&anchor, hatch_style.angle.to_radians());
+    let hatch_box = Rectangle::from(p1, p2);
+
+    // Going to assume that the hatching angle is between 0 & 90
+    while let Some(ints) = hatch_box.intersections(&hatch) {
+        let points = vec![ints[0].to_arr(), ints[1].to_arr()];
+
+        ui.line(Line::new(PlotPoints::new(points)).stroke(Stroke {
+            width: line_style.width,
+            color: line_style.colour,
+        }));
+
+        hatch.p1.x += hatch_style.spacing;
+        hatch.p2.x += hatch_style.spacing;
+    }
 }
 
 pub fn plot_circle(ui: &mut PlotUi, style: &PlotStyle, centre: [f64; 2], diameter: f64) {
@@ -150,10 +321,10 @@ pub fn plot_circle(ui: &mut PlotUi, style: &PlotStyle, centre: [f64; 2], diamete
 
     ui.polygon(
         Polygon::new(PlotPoints::from(points))
-            .fill_color(style.fill_colour)
+            .fill_color(style.fill)
             .stroke(Stroke {
-                width: style.line_width,
-                color: style.line_colour,
+                width: style.width,
+                color: style.colour,
             }),
     );
 }
@@ -183,12 +354,40 @@ pub fn plot_centre_mark(
         for pair in points.chunks(2) {
             ui.line(
                 Line::new(PlotPoints::from_iter(pair.iter().map(|&[x, y]| [x, y])))
-                    .width(style.line_width)
-                    .color(style.line_colour),
+                    .width(style.width)
+                    .color(style.colour),
             );
         }
 
         rotate_points(&mut points, centre, 90.0);
+    }
+}
+
+pub fn plot_centreline(
+    ui: &mut PlotUi,
+    style: &PlotStyle,
+    centre: [f64; 2],
+    size: f64,
+    angle: f64,
+) {
+    let mut coords = vec![0.0, 0.05, 0.15, 0.55, 0.65, 0.75, 0.85, 1.25];
+
+    for coord in coords.iter_mut() {
+        *coord *= size;
+    }
+
+    for _ in 0..2 {
+        for pair in coords.chunks(2) {
+            ui.line(
+                Line::new(PlotPoints::from(vec![[pair[0], 0.0], [pair[1], 0.0]]))
+                    .width(style.width)
+                    .color(style.colour),
+            );
+        }
+
+        for coord in coords.iter_mut() {
+            *coord = -*coord;
+        }
     }
 }
 
@@ -201,11 +400,11 @@ pub fn plot_diameter_symbol(ui: &mut PlotUi, style: &PlotStyle, centre: [f64; 2]
     translate_points(&mut bar, centre);
     rotate_points(&mut bar, centre, -30.0);
 
-    plot_circle(ui, style, centre, 1.0);
+    plot_circle(ui, style, centre, style.scale);
     ui.line(
         Line::new(PlotPoints::new(bar))
-            .width(style.line_width)
-            .color(style.line_colour),
+            .width(style.width)
+            .color(style.colour),
     );
 }
 
@@ -219,8 +418,8 @@ pub fn plot_arrow_leader(
     let angle = (knee[1] - tip[1]).atan2(knee[0] - tip[0]) * (180.0 / std::f64::consts::PI);
     ui.line(
         Line::new(PlotPoints::new(vec![tip, knee, end]))
-            .width(style.line_width)
-            .color(style.line_colour),
+            .width(style.width)
+            .color(style.colour),
     );
     ui.polygon(arrow_head(style, tip, angle));
 }
@@ -242,7 +441,7 @@ pub fn plot_diameter_limits(
     // Create points for the arrow line.
     let mut points = vec![
         [feature.size / 2.0, 0.0],
-        [feature.size / 2.0 + length, 0.0],
+        [feature.size / 2.0 + length * style.scale, 0.0],
     ];
     rotate_points(&mut points, [0.0; 2], angle);
     translate_points(&mut points, centre);
@@ -258,7 +457,7 @@ pub fn plot_diameter_limits(
     let diameter_x = if is_hand {
         x + style.scale // For right-hand, the diameter is drawn to the right.
     } else {
-        x - 2.0 * style.scale - 1.25 * width // For left-hand, account for the extra text width and padding.
+        x - (2.0 + 1.25 * width) * style.scale // For left-hand, account for the extra text width and padding.
     };
 
     // Define the positions for the arrow leader end, diameter line,
@@ -279,7 +478,7 @@ pub fn plot_diameter_limits(
         ui.text(
             Text::new(
                 PlotPoint::from(pos),
-                RichText::new(text).strong().size(13.0 * style.scale as f32),
+                RichText::new(text).strong().size(13.0),
             )
             .anchor(Align2::LEFT_CENTER),
         );
@@ -322,9 +521,9 @@ fn arrow_head(style: &PlotStyle, centre: [f64; 2], angle: f64) -> Polygon {
     rotate_points(&mut points, centre, angle);
 
     Polygon::new(PlotPoints::from(points))
-        .fill_color(style.line_colour)
+        .fill_color(style.colour)
         .stroke(Stroke {
-            width: style.line_width,
-            color: style.line_colour,
+            width: style.width,
+            color: style.colour,
         })
 }

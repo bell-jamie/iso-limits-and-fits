@@ -1,10 +1,10 @@
-use egui::{ComboBox, DragValue, Grid, RichText, SelectableLabel, Ui};
-use rand::Rng;
+use egui::{ComboBox, DragValue, Grid, SelectableLabel, Ui};
+// use rand::Rng;
 
 use super::{
     material::Material,
     tolerance::{GradesDeviations, Iso, Tolerance},
-    utils::{check_width, decimals, State},
+    utils::{decimals, State},
 };
 
 #[derive(Clone, serde::Deserialize, serde::Serialize)]
@@ -67,41 +67,41 @@ impl Feature {
         }
     }
 
-    pub fn random(hole: bool, valid: bool) -> Self {
-        let mut rng = rand::thread_rng();
+    // pub fn random(hole: bool, valid: bool) -> Self {
+    //     let mut rng = rand::thread_rng();
 
-        loop {
-            let size = rng.gen_range(0..3_150) as f64;
-            let grades = GradesDeviations::default().it_numbers;
-            let grade = &grades[rng.gen_range(0..grades.len())];
-            let deviations = if hole {
-                GradesDeviations::default().hole_letters
-            } else {
-                GradesDeviations::default().shaft_letters
-            };
-            let deviation = &deviations[rng.gen_range(0..deviations.len())];
-            let iso = Iso::new(deviation, grade);
+    //     loop {
+    //         let size = rng.gen_range(0..3_150) as f64;
+    //         let grades = GradesDeviations::default().it_numbers;
+    //         let grade = &grades[rng.gen_range(0..grades.len())];
+    //         let deviations = if hole {
+    //             GradesDeviations::default().hole_letters
+    //         } else {
+    //             GradesDeviations::default().shaft_letters
+    //         };
+    //         let deviation = &deviations[rng.gen_range(0..deviations.len())];
+    //         let iso = Iso::new(deviation, grade);
 
-            if valid && iso.convert(size).is_none() {
-                continue;
-            }
+    //         if valid && iso.convert(size).is_none() {
+    //             continue;
+    //         }
 
-            let tolerance = match iso.convert(size) {
-                Some(tolerance) => tolerance,
-                None => Tolerance::new(0.0, 0.0),
-            };
+    //         let tolerance = match iso.convert(size) {
+    //             Some(tolerance) => tolerance,
+    //             None => Tolerance::new(0.0, 0.0),
+    //         };
 
-            return Feature {
-                hole,
-                standard: true,
-                primary: true,
-                enabled: true,
-                size,
-                iso,
-                tolerance,
-            };
-        }
-    }
+    //         return Feature {
+    //             hole,
+    //             standard: true,
+    //             primary: true,
+    //             enabled: true,
+    //             size,
+    //             iso,
+    //             tolerance,
+    //         };
+    //     }
+    // }
 
     pub fn upper_limit(&self, mat: Option<&Material>) -> f64 {
         if let Some(material) = mat {
@@ -128,19 +128,12 @@ impl Feature {
         size * (1.0 + mat.cte * 0.000_001 * delta_temp)
     }
 
-    pub fn show(
-        &mut self,
-        ui: &mut Ui,
-        state: &mut State,
-        mat: &mut Material,
-        id: &str,
-        compliment: &Feature,
-    ) {
+    pub fn show(&mut self, ui: &mut Ui, state: &mut State, id: &str, compliment: &Feature) {
         ui.add_space(5.0);
 
         ui.horizontal(|ui| {
             ui.vertical(|ui| {
-                self.feature_input_ui(ui, id, state);
+                self.feature_input_ui(ui, id, state, compliment);
                 if self.enabled {
                     self.feature_output_ui(ui, id, None);
                 }
@@ -161,8 +154,14 @@ impl Feature {
         });
     }
 
-    fn feature_input_ui(&mut self, ui: &mut Ui, id: &str, state: &mut State) {
+    fn feature_input_ui(&mut self, ui: &mut Ui, id: &str, state: &mut State, compliment: &Feature) {
         let dropdowns = GradesDeviations::default();
+        let size_range = if self.hole {
+            // prevent zero wall thickness
+            0.0..=compliment.lower_limit(None) - self.tolerance.upper
+        } else {
+            compliment.upper_limit(None) - self.tolerance.lower..=3_150.0
+        };
 
         ui.horizontal(|ui| {
             if ui
@@ -194,7 +193,7 @@ impl Feature {
                         //     to_parse.parse::<f64>().ok()
                         // })
                         .speed(0.1)
-                        .range(0.0..=3_150.0),
+                        .range(size_range),
                 )
                 .on_hover_text("Size")
             });

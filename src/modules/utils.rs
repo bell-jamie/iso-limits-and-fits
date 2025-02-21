@@ -1,4 +1,4 @@
-use egui::{Button, Context, DragValue, Label, Pos2, RichText, Sense, Ui, Vec2};
+use egui::{Context, RichText, Ui, Vec2};
 
 #[derive(Clone, serde::Deserialize, serde::Serialize)]
 pub struct State {
@@ -100,11 +100,11 @@ pub fn text_width(ctx: &Context, text: &str) -> Vec2 {
     .size()
 }
 
-pub fn check_width(ui: &mut Ui) {
-    let width = ui.min_rect().width();
-    ui.label(RichText::new(format!("{width} pixels")).strong())
-        .on_hover_text(format!("{width}"));
-}
+// pub fn check_width(ui: &mut Ui) {
+//     let width = ui.min_rect().width();
+//     ui.label(RichText::new(format!("{width} pixels")).strong())
+//         .on_hover_text(format!("{width}"));
+// }
 
 // pub fn linspace(a: f64, b: f64, n: usize) -> Vec<f64> {
 //     (0..n)

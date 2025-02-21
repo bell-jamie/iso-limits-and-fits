@@ -35,55 +35,19 @@ impl Material {
         }
     }
 
-    pub fn aluminium() -> Self {
-        Material {
-            temp: 20.0,
-            cte: 23.5,
-            poissons: 0.34,
-            youngs: 69_000.0,
-            ys: 260.0,
-            uts: 500.0,
-        }
-    }
+    // pub fn aluminium() -> Self {
+    //     Material {
+    //         temp: 20.0,
+    //         cte: 23.5,
+    //         poissons: 0.34,
+    //         youngs: 69_000.0,
+    //         ys: 260.0,
+    //         uts: 500.0,
+    //     }
+    // }
 
     pub fn input(&mut self, ui: &mut Ui, id: &str) {
         ui.add_space(5.0);
-
-        // ui.horizontal(|ui| {
-        //     ui.add_sized(
-        //         [45.0, 18.0],
-        //         DragValue::new(&mut self.temp)
-        //             .custom_formatter(|t, _| format!("{t} ºC"))
-        //             .custom_parser(|t| {
-        //                 let to_parse = t
-        //                     .chars()
-        //                     .filter(|c| c.is_ascii_digit() || c == &'.' || c == &'-')
-        //                     .collect::<String>();
-        //                 to_parse.parse::<f64>().ok()
-        //             })
-        //             .speed(1.0)
-        //             .range(-273.15..=10_000.0)
-        //             .min_decimals(1),
-        //     )
-        //     .on_hover_text("Temperature");
-
-        //     ui.add_sized(
-        //         [60.0, 18.0],
-        //         DragValue::new(&mut self.cte)
-        //             .custom_formatter(|e, _| format!("{e:.1} ¹/k")) // /ºC")) ¹/k
-        //             .custom_parser(|t| {
-        //                 let parsed = t
-        //                     .chars()
-        //                     .filter(|c| c.is_ascii_digit() || *c == '.' || *c == '-')
-        //                     .collect::<String>();
-        //                 parsed.parse::<f64>().ok()
-        //             })
-        //             .speed(0.1)
-        //             .range(0.0..=f64::MAX)
-        //             .min_decimals(1),
-        //     )
-        //     .on_hover_text("Thermal expansion coefficient");
-        // });
 
         let drag_width = 61.0;
 

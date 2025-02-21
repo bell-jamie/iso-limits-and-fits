@@ -1,6 +1,7 @@
 pub mod component;
 pub mod feature;
 pub mod fit;
+pub mod geometry;
 pub mod interference;
 pub mod lookup;
 pub mod material;
