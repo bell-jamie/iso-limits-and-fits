@@ -173,9 +173,11 @@ const CHANGELOG_ENTRIES: &[ChangelogEntry] = &[
     },
     ChangelogEntry {
         version: "0.6.3",
-        notes: &[
-            "Soroush quickfix to lookup table.",
-        ],
+        notes: &["Soroush quickfix to lookup table."],
+    },
+    ChangelogEntry {
+        version: "0.6.4",
+        notes: &["Corrected logic for P to ZC deviation deltas."],
     },
 ];
 

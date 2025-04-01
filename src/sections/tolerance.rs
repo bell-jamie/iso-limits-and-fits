@@ -156,12 +156,12 @@ impl Iso {
             } else {
                 Some(Tolerance::new(flt(dev), flt(dev - tol)))
             }
-        } else if (17..30).contains(&idx_dev) && idx_grade > 9 {
-            // P to ZC - This needs to be checked, doesn't exist below IT7?
+        } else if (17..30).contains(&idx_dev) {
+            // P to ZC
             let idx_size = DEVIATIONS_K_ZC.iter().position(|&s| s[0] >= size)?;
             let dev = -rtv(*DEVIATIONS_K_ZC[idx_size].get(idx_dev - 13)?)?
-                + if idx_grade > 9 {
-                    Self::delta(size, idx_grade) // Above IT7 delta is added
+                + if idx_grade < 10 {
+                    Self::delta(size, idx_grade) // Below IT8 delta is added
                 } else {
                     0
                 };
