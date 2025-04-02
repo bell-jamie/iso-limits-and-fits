@@ -1,11 +1,12 @@
+use std::f64::{consts::PI, EPSILON};
+
 use egui::{vec2, Align2, Color32, Frame, RichText, Stroke, Ui};
 use egui_plot::{Line, Plot, PlotPoint, PlotPoints, PlotUi, Polygon, Text};
 
 use super::{
     component::Component,
     feature::Feature,
-    geometry::Point,
-    geometry::{Rectangle, Segment},
+    geometry::{Path, Point, Rectangle, Segment},
     utils::text_width,
 };
 
@@ -41,6 +42,8 @@ pub struct HatchStyle {
 const RESOLUTION: usize = 1_000;
 
 pub fn side_by_side(ui: &mut Ui, left_component: &Component, right_component: &Component) {
+    let (width, height) = (170.0, 60.0);
+    let background_colour = ui.visuals().window_fill;
     let outline_colour = if ui.visuals().dark_mode {
         Color32::LIGHT_GRAY
     } else {
@@ -67,6 +70,26 @@ pub fn side_by_side(ui: &mut Ui, left_component: &Component, right_component: &C
         divisor / 15.0
     };
 
+    let line_style = PlotStyle {
+        scale,
+        width: 1.0,
+        colour: outline_colour,
+        fill: Color32::TRANSPARENT,
+    };
+    let annotate_style = PlotStyle {
+        scale,
+        width: 1.5,
+        colour: outline_colour,
+        fill: Color32::TRANSPARENT,
+    };
+    let hatch_style = HatchStyle {
+        angle: 45.0,
+        spacing: 2.5,
+        padding: 0.5,
+        width: 0.5,
+        colour: outline_colour,
+    };
+
     Frame::group(ui.style())
         .inner_margin(10.0)
         .rounding(10.0)
@@ -87,25 +110,7 @@ pub fn side_by_side(ui: &mut Ui, left_component: &Component, right_component: &C
                 .allow_scroll(false)
                 .allow_boxed_zoom(false)
                 .show(ui, |ui| {
-                    let line_style = PlotStyle {
-                        scale,
-                        width: 1.0,
-                        colour: outline_colour,
-                        fill: Color32::TRANSPARENT,
-                    };
-                    let annotate_style = PlotStyle {
-                        scale,
-                        width: 1.5,
-                        colour: outline_colour,
-                        fill: Color32::TRANSPARENT,
-                    };
-                    let hatch_style = HatchStyle {
-                        angle: 45.0,
-                        spacing: 1.8,
-                        padding: 0.25,
-                        width: 0.8,
-                        colour: outline_colour,
-                    };
+                    set_plot_limits(ui, true, background_colour, width / 2.0, height / 2.0);
 
                     end_view(
                         ui,
@@ -137,6 +142,42 @@ pub fn side_by_side(ui: &mut Ui, left_component: &Component, right_component: &C
                     );
                 });
         });
+}
+
+pub fn set_plot_limits(ui: &mut PlotUi, visible: bool, background_colour: Color32, x: f64, y: f64) {
+    if visible {
+        let (dx, dy) = (x / 10.0, y / 10.0);
+        let (p1, p2, p3) = (
+            Point::new(-x + dx, y),
+            Point::new(-x, y),
+            Point::new(-x, y - dy),
+        );
+        let mut marker = Path {
+            points: vec![p1, p2, p3],
+        };
+        for _ in 0..2 {
+            for _ in 0..2 {
+                ui.line(marker.to_line().stroke(Stroke {
+                    width: 1.0,
+                    color: Color32::RED,
+                }));
+
+                marker.mirror_in_y();
+            }
+
+            marker.mirror_in_x();
+        }
+    } else {
+        ui.polygon(
+            Rectangle::new([-x, y], [x, -y])
+                .to_poly()
+                .stroke(Stroke {
+                    width: 1.0,
+                    color: background_colour,
+                })
+                .fill_color(Color32::TRANSPARENT),
+        );
+    }
 }
 
 pub fn end_view(
@@ -205,32 +246,6 @@ pub fn centre_view(
     };
     let left = -right;
 
-    if right_component.inner_diameter.enabled {
-        let upper = scale * right_component.outer_diameter.size / 2.0;
-        let lower = scale * right_component.inner_diameter.size / 2.0;
-
-        let mut p1 = Point::new(left, upper);
-        let mut p2 = Point::new(right, lower);
-
-        plot_hatched_section(ui, scale, line_style, hatch_style, &p1, &p2); // upper rect
-
-        p1.mirror_in_x();
-        p2.mirror_in_x();
-
-        plot_hatched_section(ui, scale, line_style, hatch_style, &p1, &p2); // lower rect
-    } else {
-        let upper = scale * right_component.outer_diameter.size / 2.0;
-        let lower = -upper;
-
-        let p1 = Point::new(left, upper);
-        let p2 = Point::new(right, lower);
-
-        plot_hatched_section(ui, scale, line_style, hatch_style, &p1, &p2);
-    }
-
-    let mut hatch_style = hatch_style.clone();
-    hatch_style.angle = -hatch_style.angle;
-
     if left_component.outer_diameter.enabled {
         let upper = scale * left_component.outer_diameter.size / 2.0;
         let lower = scale * left_component.inner_diameter.size / 2.0;
@@ -238,14 +253,44 @@ pub fn centre_view(
         let mut p1 = Point::new(left, upper);
         let mut p2 = Point::new(right, lower);
 
-        plot_hatched_section(ui, scale, line_style, &hatch_style, &p1, &p2); // upper rect
+        plot_hatched_section(ui, scale, line_style, &hatch_style, &p1, &p2, false); // upper rect
 
         p1.mirror_in_x();
         p2.mirror_in_x();
 
-        plot_hatched_section(ui, scale, line_style, &hatch_style, &p1, &p2); // lower rect
+        plot_hatched_section(ui, scale, line_style, &hatch_style, &p1, &p2, false);
+        // lower rect
     }
 
+    // let mut hatch_style = hatch_style.clone();
+    // hatch_style.angle = -hatch_style.angle;
+
+    if right_component.inner_diameter.enabled {
+        let upper = scale * right_component.outer_diameter.size / 2.0;
+        let lower = scale * right_component.inner_diameter.size / 2.0;
+
+        let mut p1 = Point::new(left, upper);
+        let mut p2 = Point::new(right, lower);
+
+        plot_hatched_section(ui, scale, line_style, &hatch_style, &p1, &p2, true); // upper rect
+
+        p1.mirror_in_x();
+        p2.mirror_in_x();
+
+        plot_hatched_section(ui, scale, line_style, &hatch_style, &p1, &p2, true);
+    // lower rect
+    } else {
+        let upper = scale * right_component.outer_diameter.size / 2.0;
+        let lower = -upper;
+
+        let p1 = Point::new(left, upper);
+        let p2 = Point::new(right, lower);
+
+        plot_hatched_section(ui, scale, line_style, &hatch_style, &p1, &p2, true);
+    }
+
+    // TODO
+    // Add white underlay to centreline for separation
     plot_centreline(ui, line_style, centre, right, 0.0);
 }
 
@@ -256,55 +301,57 @@ pub fn plot_hatched_section(
     hatch_style: &HatchStyle,
     p1: &Point,
     p2: &Point,
+    reverse: bool, // temporary
 ) {
-    let centroid = Segment::from(p1, p2).midpoint().to_arr();
-    let pad = hatch_style.padding;
-    let mut outline_points = Rectangle::from(p1, p2).to_vec();
+    // Create cartesian offsets for the hatching
+    let dx = hatch_style.spacing * hatch_style.angle.sin();
+    let dy = -hatch_style.spacing * hatch_style.angle.cos();
 
-    scale_points(&mut outline_points, centroid, scale);
+    // Create section outline and construction for the hatching
+    let section = Rectangle::from(p1, p2);
+    let seed = Point::from([section.x1, section.y2]); // This only works for 0 to 90º
+    let mut hatching = section.clone();
+    hatching.offset(-hatch_style.padding); // Add padding to hatching
 
-    let section = Polygon::new(PlotPoints::from(outline_points))
-        .fill_color(Color32::TRANSPARENT)
-        .stroke(Stroke {
-            width: line_style.width,
-            color: line_style.colour,
-        });
+    // Create first hatch that will be patterned
+    // Two-step creation ensures segment always intersects section
+    let hatch = Segment::from_point_angle(&seed, hatch_style.angle.to_radians());
+    let mut hatch = Segment::new(
+        &Point::new(hatch.find_x(section.y1), section.y1),
+        &Point::new(section.x2, hatch.find_y(section.x2)),
+    );
+    hatch.offset(dx, dy); // Initial offset to intersect section
 
-    ui.polygon(section);
+    // ui.polygon(hatching.to_poly()); // Uncomment to show hatching outline
 
-    let p3 = Point::new(p1.x + pad, p1.y - pad);
-    let p4 = Point::new(p1.x - pad, p1.y + pad);
+    // Drawing section outline
+    ui.polygon(
+        section
+            .to_poly()
+            .fill_color(Color32::TRANSPARENT)
+            .stroke(Stroke {
+                width: line_style.width,
+                color: line_style.colour,
+            }),
+    );
 
-    let mut hatch_points = Rectangle::from(&p3, &p4).to_vec();
+    while let Some(ints) = hatching.intersections(&hatch) {
+        let mut p1 = ints[0];
+        let mut p2 = ints[1];
 
-    scale_points(&mut hatch_points, centroid, scale);
+        if reverse {
+            p1.mirror_in_y();
+            p2.mirror_in_y();
+        }
 
-    let hatch_bounding_box = Polygon::new(PlotPoints::from(hatch_points))
-        .fill_color(Color32::RED)
-        .stroke(Stroke {
-            width: line_style.width,
-            color: Color32::TRANSPARENT,
-        });
+        let points = PlotPoints::new(vec![p1.to_arr(), p2.to_arr()]);
 
-    // ui.polygon(hatch_bounding_box);
-
-    // This is the custom geometry driven section
-    let mut anchor = p3.clone();
-    anchor.x += 0.01; // fiddle to stop FP errors
-    let mut hatch = Segment::from_point_angle(&anchor, hatch_style.angle.to_radians());
-    let hatch_box = Rectangle::from(p1, p2);
-
-    // Going to assume that the hatching angle is between 0 & 90
-    while let Some(ints) = hatch_box.intersections(&hatch) {
-        let points = vec![ints[0].to_arr(), ints[1].to_arr()];
-
-        ui.line(Line::new(PlotPoints::new(points)).stroke(Stroke {
-            width: line_style.width,
-            color: line_style.colour,
+        ui.line(Line::new(points).stroke(Stroke {
+            width: hatch_style.width,
+            color: hatch_style.colour,
         }));
 
-        hatch.p1.x += hatch_style.spacing;
-        hatch.p2.x += hatch_style.spacing;
+        hatch.offset(dx, dy);
     }
 }
 
@@ -346,9 +393,9 @@ pub fn plot_centre_mark(
         [distances[2], 0.0],
     ];
 
-    rotate_points(&mut points, centre, angle);
-    translate_points(&mut points, centre);
-    scale_points(&mut points, centre, size);
+    rotate_points_old(&mut points, centre, angle);
+    translate_points_old(&mut points, centre);
+    scale_points_old(&mut points, centre, size);
 
     for _ in 0..2 {
         for pair in points.chunks(2) {
@@ -359,7 +406,7 @@ pub fn plot_centre_mark(
             );
         }
 
-        rotate_points(&mut points, centre, 90.0);
+        rotate_points_old(&mut points, centre, 90.0);
     }
 }
 
@@ -397,8 +444,8 @@ pub fn plot_diameter_symbol(ui: &mut PlotUi, style: &PlotStyle, centre: [f64; 2]
         [0.0, -style.scale / overhang],
         [0.0, style.scale / overhang],
     ];
-    translate_points(&mut bar, centre);
-    rotate_points(&mut bar, centre, -30.0);
+    translate_points_old(&mut bar, centre);
+    rotate_points_old(&mut bar, centre, -30.0);
 
     plot_circle(ui, style, centre, style.scale);
     ui.line(
@@ -443,8 +490,8 @@ pub fn plot_diameter_limits(
         [feature.size / 2.0, 0.0],
         [feature.size / 2.0 + length * style.scale, 0.0],
     ];
-    rotate_points(&mut points, [0.0; 2], angle);
-    translate_points(&mut points, centre);
+    rotate_points_old(&mut points, [0.0; 2], angle);
+    translate_points_old(&mut points, centre);
 
     let (tip, knee) = (points[0], points[1]); // Define the tip and knee of the arrow.
     let is_hand = angle.abs() <= 90.0; // Determine if we are using a "hand" (right-hand) orientation.
@@ -457,7 +504,7 @@ pub fn plot_diameter_limits(
     let diameter_x = if is_hand {
         x + style.scale // For right-hand, the diameter is drawn to the right.
     } else {
-        x - (2.0 + 1.25 * width) * style.scale // For left-hand, account for the extra text width and padding.
+        x - (2.0 + 1.25 * width) * style.scale - 5.0 // BODGED! For left-hand, account for the extra text width and padding.
     };
 
     // Define the positions for the arrow leader end, diameter line,
@@ -489,7 +536,7 @@ pub fn plot_diameter_limits(
     draw_text(lower_pos, lower_text);
 }
 
-fn rotate_points(points: &mut [[f64; 2]], centre: [f64; 2], angle: f64) {
+fn rotate_points_old(points: &mut [[f64; 2]], centre: [f64; 2], angle: f64) {
     let radians = std::f64::consts::PI / 180.0;
     let rotation = [(angle * radians).cos(), (angle * radians).sin()];
 
@@ -500,14 +547,14 @@ fn rotate_points(points: &mut [[f64; 2]], centre: [f64; 2], angle: f64) {
     }
 }
 
-fn scale_points(points: &mut [[f64; 2]], centre: [f64; 2], scale: f64) {
+fn scale_points_old(points: &mut [[f64; 2]], centre: [f64; 2], scale: f64) {
     for point in points.iter_mut() {
         point[0] = ((point[0] - centre[0]) * scale) + centre[0];
         point[1] = ((point[1] - centre[1]) * scale) + centre[1];
     }
 }
 
-fn translate_points(points: &mut [[f64; 2]], target: [f64; 2]) {
+fn translate_points_old(points: &mut [[f64; 2]], target: [f64; 2]) {
     for point in points.iter_mut() {
         point[0] += target[0];
         point[1] += target[1];
@@ -516,9 +563,9 @@ fn translate_points(points: &mut [[f64; 2]], target: [f64; 2]) {
 
 fn arrow_head(style: &PlotStyle, centre: [f64; 2], angle: f64) -> Polygon {
     let mut points = vec![[0.0, 0.0], [0.8, -0.3], [0.8, 0.3], [0.0, 0.0]];
-    translate_points(&mut points, centre);
-    scale_points(&mut points, centre, style.scale);
-    rotate_points(&mut points, centre, angle);
+    translate_points_old(&mut points, centre);
+    scale_points_old(&mut points, centre, style.scale);
+    rotate_points_old(&mut points, centre, angle);
 
     Polygon::new(PlotPoints::from(points))
         .fill_color(style.colour)

@@ -156,11 +156,15 @@ impl Feature {
 
     fn feature_input_ui(&mut self, ui: &mut Ui, id: &str, state: &mut State, compliment: &Feature) {
         let dropdowns = GradesDeviations::default();
-        let size_range = if self.hole {
-            // prevent zero wall thickness
-            0.0..=compliment.lower_limit(None) - self.tolerance.upper
+        let size_range = if compliment.enabled {
+            if self.hole {
+                // prevent zero wall thickness
+                0.0..=compliment.lower_limit(None) - self.tolerance.upper
+            } else {
+                compliment.upper_limit(None) - self.tolerance.lower..=3_150.0
+            }
         } else {
-            compliment.upper_limit(None) - self.tolerance.lower..=3_150.0
+            0.0..=3_150.0
         };
 
         ui.horizontal(|ui| {
