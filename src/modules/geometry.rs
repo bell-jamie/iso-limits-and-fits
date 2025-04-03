@@ -1,7 +1,7 @@
 use std::f64::consts::PI;
 
 use super::utils::decimals;
-use egui_plot::{Line, PlotPoints, Polygon};
+use egui_plot::{Line, PlotPoint, PlotPoints, Polygon};
 use serde::{Deserialize, Serialize};
 
 const EPS: f64 = 1e-9; // Used to prevent divide-by-zero
@@ -37,6 +37,13 @@ impl Point {
         self.x += x;
         self.y += y;
     }
+
+    pub fn to_pp(&self) -> PlotPoint {
+        PlotPoint {
+            x: self.x,
+            y: self.y,
+        }
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -58,6 +65,7 @@ impl Segment {
     }
 
     pub fn from_point_angle(p1: &Point, angle: f64) -> Self {
+        let angle = angle.to_radians();
         let p2 = Point::new(p1.x + angle.cos(), p1.y + angle.sin());
         Segment::new(&p1, &p2)
     }
@@ -70,9 +78,31 @@ impl Segment {
         Segment::new(&Point::new(-1.0, y), &Point::new(1.0, y))
     }
 
+    pub fn from_centre(centre: &Point, length: f64, angle: f64) -> Self {
+        let mut horizontal = Segment::new(
+            &Point::new(centre.x - length / 2.0, 0.0),
+            &Point::new(centre.x + length / 2.0, 0.0),
+        );
+        horizontal.rotate(centre, angle);
+        horizontal
+    }
+
+    pub fn rotate(&mut self, centre: &Point, angle: f64) {
+        let mut points = vec![self.p1, self.p2];
+        rotate_points(&mut points, centre, angle.to_radians());
+        (self.p1, self.p2) = (points[0], points[1]);
+    }
+
     pub fn offset(&mut self, x: f64, y: f64) {
         self.p1.offset(x, y);
         self.p2.offset(x, y);
+    }
+
+    pub fn offset_vector(&mut self, distance: f64, angle: f64) {
+        let angle = angle.to_radians();
+        let dx = distance * angle.cos();
+        let dy = distance * angle.sin();
+        self.offset(dx, dy);
     }
 
     pub fn gradient(&self) -> f64 {
@@ -101,6 +131,10 @@ impl Segment {
 
     pub fn midpoint(&self) -> Point {
         Point::new((self.p1.x + self.p2.x) / 2.0, (self.p1.y + self.p2.y) / 2.0)
+    }
+
+    pub fn to_line(&self) -> Line {
+        Line::new(PlotPoints::from(vec![self.p1.to_arr(), self.p2.to_arr()]))
     }
 }
 
@@ -153,6 +187,12 @@ impl Rectangle {
         ]
     }
 
+    pub fn centre(&self) -> Point {
+        let x = self.x1 + self.width() / 2.0;
+        let y = self.y1 + self.height() / 2.0;
+        Point { x, y }
+    }
+
     pub fn width(&self) -> f64 {
         self.x2 - self.x1
     }
@@ -203,8 +243,16 @@ impl Path {
     //     Self { points }
     // }
 
-    pub fn rotate(&mut self, centre: Point, angle: f64) {
-        rotate_points(&mut self.points, centre, angle)
+    pub fn rotate(&mut self, centre: &Point, angle: f64) {
+        rotate_points(&mut self.points, centre, angle.to_radians());
+    }
+
+    pub fn translate(&mut self, dx: f64, dy: f64) {
+        translate_points(&mut self.points, dx, dy);
+    }
+
+    pub fn scale(&mut self, centre: &Point, scale: f64) {
+        scale_points(&mut self.points, centre, scale);
     }
 
     pub fn mirror_in_x(&mut self) {
@@ -218,6 +266,16 @@ impl Path {
     pub fn to_line(&self) -> Line {
         Line::new(PlotPoints::from_iter(
             self.points.iter().map(|p| p.to_arr()),
+        ))
+    }
+
+    /// This links the last point in the path to create a full polygon
+    pub fn to_poly(&self) -> Polygon {
+        Polygon::new(PlotPoints::from_iter(
+            self.points
+                .iter()
+                .chain(vec![&self.points[0]])
+                .map(|p| p.to_arr()),
         ))
     }
 }
@@ -243,14 +301,14 @@ pub fn translate_points(points: &mut Vec<Point>, dx: f64, dy: f64) {
     }
 }
 
-pub fn scale_points(points: &mut Vec<Point>, centre: Point, scale: f64) {
+pub fn scale_points(points: &mut Vec<Point>, centre: &Point, scale: f64) {
     for point in points.iter_mut() {
         point.x = ((point.x - centre.x) * scale) + centre.x;
         point.y = ((point.y - centre.y) * scale) + centre.y;
     }
 }
 
-pub fn rotate_points(points: &mut Vec<Point>, centre: Point, angle: f64) {
+pub fn rotate_points(points: &mut Vec<Point>, centre: &Point, angle: f64) {
     let (sin, cos) = (angle.sin(), angle.cos());
 
     for point in points.iter_mut() {
