@@ -4,7 +4,8 @@ use super::utils::decimals;
 use egui_plot::{Line, PlotPoint, PlotPoints, Polygon};
 use serde::{Deserialize, Serialize};
 
-const EPS: f64 = 1e-9; // Used to prevent divide-by-zero
+const EPS: f64 = 1e-9; // Used to prevent divide-by-zero (f64::EPSILON)
+const RESOLUTION: usize = 1_000; // Must be even
 
 #[derive(Clone, Copy, Serialize, Deserialize)]
 pub struct Point {
@@ -17,12 +18,8 @@ impl Point {
         Self { x, y }
     }
 
-    pub fn from(p: [f64; 2]) -> Self {
-        Self { x: p[0], y: p[1] }
-    }
-
-    pub fn to_arr(&self) -> [f64; 2] {
-        [self.x, self.y]
+    pub fn from([x, y]: [f64; 2]) -> Self {
+        Self { x, y }
     }
 
     pub fn mirror_in_x(&mut self) {
@@ -33,12 +30,26 @@ impl Point {
         self.x = -self.x;
     }
 
-    pub fn offset(&mut self, x: f64, y: f64) {
-        self.x += x;
-        self.y += y;
+    pub fn offset(&mut self, dx: f64, dy: f64) {
+        self.x += dx;
+        self.y += dy;
     }
 
-    pub fn to_pp(&self) -> PlotPoint {
+    pub fn vector_offset(&mut self, angle: f64, distance: f64) {
+        let dx = distance * angle.to_radians().cos();
+        let dy = distance * angle.to_radians().sin();
+        self.offset(dx, dy);
+    }
+
+    pub fn as_array(self) -> [f64; 2] {
+        [self.x, self.y]
+    }
+
+    pub fn as_tuple(self) -> (f64, f64) {
+        (self.x, self.y)
+    }
+
+    pub fn as_plotpoint(self) -> PlotPoint {
         PlotPoint {
             x: self.x,
             y: self.y,
@@ -53,41 +64,38 @@ pub struct Segment {
 }
 
 impl Segment {
-    pub fn new(p1: &Point, p2: &Point) -> Self {
-        Self {
-            p1: p1.clone(),
-            p2: p2.clone(),
-        }
+    pub fn new(p1: Point, p2: Point) -> Self {
+        Self { p1, p2 }
     }
 
     pub fn from_arr(p1: [f64; 2], p2: [f64; 2]) -> Self {
-        Segment::new(&Point::from(p1), &Point::from(p2))
+        Segment::new(Point::from(p1), Point::from(p2))
     }
 
-    pub fn from_point_angle(p1: &Point, angle: f64) -> Self {
+    pub fn from_point_angle(p1: Point, angle: f64) -> Self {
         let angle = angle.to_radians();
         let p2 = Point::new(p1.x + angle.cos(), p1.y + angle.sin());
-        Segment::new(&p1, &p2)
+        Segment::new(p1, p2)
     }
 
     pub fn from_x(x: f64) -> Self {
-        Segment::new(&Point::new(x, -1.0), &Point::new(x, 1.0))
+        Segment::new(Point::new(x, -1.0), Point::new(x, 1.0))
     }
 
     pub fn from_y(y: f64) -> Self {
-        Segment::new(&Point::new(-1.0, y), &Point::new(1.0, y))
+        Segment::new(Point::new(-1.0, y), Point::new(1.0, y))
     }
 
-    pub fn from_centre(centre: &Point, length: f64, angle: f64) -> Self {
+    pub fn from_centre(centre: Point, length: f64, angle: f64) -> Self {
         let mut horizontal = Segment::new(
-            &Point::new(centre.x - length / 2.0, 0.0),
-            &Point::new(centre.x + length / 2.0, 0.0),
+            Point::new(centre.x - length / 2.0, centre.y),
+            Point::new(centre.x + length / 2.0, centre.y),
         );
         horizontal.rotate(centre, angle);
         horizontal
     }
 
-    pub fn rotate(&mut self, centre: &Point, angle: f64) {
+    pub fn rotate(&mut self, centre: Point, angle: f64) {
         let mut points = vec![self.p1, self.p2];
         rotate_points(&mut points, centre, angle.to_radians());
         (self.p1, self.p2) = (points[0], points[1]);
@@ -106,7 +114,12 @@ impl Segment {
     }
 
     pub fn gradient(&self) -> f64 {
-        (self.p2.y - self.p1.y) / (self.p2.x - self.p1.x) + EPS
+        let dx = self.p2.x - self.p1.x;
+        if dx.abs() < EPS {
+            f64::INFINITY
+        } else {
+            (self.p2.y - self.p1.y) / dx
+        }
     }
 
     pub fn x_intersect(&self) -> f64 {
@@ -117,15 +130,19 @@ impl Segment {
         self.p1.y - self.gradient() * self.p1.x
     }
 
-    pub fn find_x(&self, y: f64) -> f64 {
+    pub fn line_equation(&self) -> (f64, f64) {
         let m = self.gradient();
         let c = self.p1.y - m * self.p1.x;
+        (m, c)
+    }
+
+    pub fn find_x(&self, y: f64) -> f64 {
+        let (m, c) = self.line_equation();
         (y - c) / m
     }
 
     pub fn find_y(&self, x: f64) -> f64 {
-        let m = self.gradient();
-        let c = self.p1.y - m * self.p1.x;
+        let (m, c) = self.line_equation();
         m * x + c
     }
 
@@ -134,7 +151,122 @@ impl Segment {
     }
 
     pub fn to_line(&self) -> Line {
-        Line::new(PlotPoints::from(vec![self.p1.to_arr(), self.p2.to_arr()]))
+        Line::new(PlotPoints::from(vec![
+            self.p1.as_array(),
+            self.p2.as_array(),
+        ]))
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct Path {
+    pub points: Vec<Point>,
+}
+
+impl Path {
+    // pub fn new(points: Vec<Point>) -> Self {
+    //     Self { points }
+    // }
+
+    pub fn rotate(&mut self, centre: Point, angle: f64) {
+        rotate_points(&mut self.points, centre, angle.to_radians());
+    }
+
+    pub fn translate(&mut self, dx: f64, dy: f64) {
+        translate_points(&mut self.points, dx, dy);
+    }
+
+    pub fn scale(&mut self, centre: Point, scale: f64) {
+        scale_points(&mut self.points, centre, scale);
+    }
+
+    pub fn mirror_in_x(&mut self) {
+        mirror_points_in_x(&mut self.points);
+    }
+
+    pub fn mirror_in_y(&mut self) {
+        mirror_points_in_y(&mut self.points);
+    }
+
+    pub fn to_line(&self) -> Line {
+        Line::new(PlotPoints::from_iter(
+            self.points.iter().map(|p| p.as_array()),
+        ))
+    }
+
+    /// This links the last point in the path to create a full polygon
+    pub fn to_poly(&self) -> Polygon {
+        Polygon::new(PlotPoints::from_iter(
+            self.points
+                .iter()
+                .chain(vec![&self.points[0]])
+                .map(|p| p.as_array()),
+        ))
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct Circle {
+    pub centre: Point,
+    pub radius: f64,
+}
+
+impl Circle {
+    pub fn new(centre: Point, radius: f64) -> Self {
+        Circle { centre, radius }
+    }
+
+    pub fn to_poly(&self) -> Polygon {
+        let mut points = Vec::with_capacity(RESOLUTION);
+
+        for i in 0..RESOLUTION {
+            let theta = 2.0 * std::f64::consts::PI * (i as f64 / RESOLUTION as f64);
+            let x = self.centre.x + self.radius * theta.cos();
+            let y = self.centre.y + self.radius * theta.sin();
+            points.push([x, y]);
+        }
+
+        Polygon::new(PlotPoints::from(points))
+    }
+
+    pub fn intersections(&self, segment: &Segment) -> Option<Vec<Point>> {
+        let (x1, y1) = segment.p1.as_tuple();
+        let (x2, y2) = segment.p2.as_tuple();
+        let (cx, cy) = self.centre.as_tuple();
+
+        let dx = x2 - x1;
+        let dy = y2 - y1;
+
+        let fx = x1 - cx;
+        let fy = y1 - cy;
+
+        let a = dx * dx + dy * dy;
+        let b = 2.0 * (fx * dx + fy * dy);
+        let c = fx * fx + fy * fy - self.radius * self.radius;
+
+        let discriminant = b * b - 4.0 * a * c;
+
+        if discriminant < 0.0 {
+            None
+        } else {
+            let sqrt_d = discriminant.sqrt();
+            let t1 = (-b - sqrt_d) / (2.0 * a);
+            let t2 = (-b + sqrt_d) / (2.0 * a);
+
+            let mut points = Vec::new();
+
+            for t in [t1, t2] {
+                if t >= 0.0 && t <= 1.0 {
+                    points.push(Point::new(x1 + t * dx, y1 + t * dy));
+                }
+            }
+
+            if points.is_empty() {
+                None
+            } else {
+                Some(points)
+            }
+        }
     }
 }
 
@@ -147,7 +279,7 @@ pub struct Rectangle {
 }
 
 impl Rectangle {
-    pub fn from(p1: &Point, p2: &Point) -> Self {
+    pub fn from(p1: Point, p2: Point) -> Self {
         let x1 = p1.x.min(p2.x);
         let x2 = p1.x.max(p2.x);
         let y1 = p1.y.min(p2.y);
@@ -157,7 +289,7 @@ impl Rectangle {
     }
 
     pub fn new(p1: [f64; 2], p2: [f64; 2]) -> Self {
-        Rectangle::from(&Point::from(p1), &Point::from(p2))
+        Rectangle::from(Point::from(p1), Point::from(p2))
     }
 
     pub fn scale(&mut self, scale: f64) {
@@ -205,90 +337,30 @@ impl Rectangle {
         Polygon::new(PlotPoints::new(self.to_vec()))
     }
 
-    pub fn intersections(&self, s: &Segment) -> Option<Vec<Point>> {
-        let (x1, x2) = (self.x1.min(self.x2), self.x1.max(self.x2));
-        let (y1, y2) = (self.y1.min(self.y2), self.y1.max(self.y2));
-
-        let bounds_x = x1..=x2;
-        let bounds_y = y1..=y2;
+    pub fn intersections(&self, segment: &Segment) -> Option<Vec<Point>> {
+        let bounds_x = self.x1..=self.x2;
+        let bounds_y = self.y1..=self.y2;
 
         let candidates = [
-            (s.find_x(y1), y1),
-            (s.find_x(y2), y2),
-            (x1, s.find_y(x1)),
-            (x2, s.find_y(x2)),
+            (segment.find_x(self.y1), self.y1),
+            (segment.find_x(self.y2), self.y2),
+            (self.x1, segment.find_y(self.x1)),
+            (self.x2, segment.find_y(self.x2)),
         ];
 
-        let intersections: Vec<Point> = candidates
+        let intersections = candidates
             .into_iter()
             .filter(|&(x, y)| bounds_x.contains(&x) && bounds_y.contains(&y))
             .map(|(x, y)| Point::new(x, y))
-            .collect();
+            .collect::<Vec<Point>>();
 
-        if intersections.len() != 2 {
+        if intersections.is_empty() {
             None
         } else {
             Some(intersections)
         }
     }
 }
-
-#[derive(Clone, Serialize, Deserialize)]
-pub struct Path {
-    pub points: Vec<Point>,
-}
-
-impl Path {
-    // pub fn new(points: Vec<Point>) -> Self {
-    //     Self { points }
-    // }
-
-    pub fn rotate(&mut self, centre: &Point, angle: f64) {
-        rotate_points(&mut self.points, centre, angle.to_radians());
-    }
-
-    pub fn translate(&mut self, dx: f64, dy: f64) {
-        translate_points(&mut self.points, dx, dy);
-    }
-
-    pub fn scale(&mut self, centre: &Point, scale: f64) {
-        scale_points(&mut self.points, centre, scale);
-    }
-
-    pub fn mirror_in_x(&mut self) {
-        mirror_points_in_x(&mut self.points);
-    }
-
-    pub fn mirror_in_y(&mut self) {
-        mirror_points_in_y(&mut self.points);
-    }
-
-    pub fn to_line(&self) -> Line {
-        Line::new(PlotPoints::from_iter(
-            self.points.iter().map(|p| p.to_arr()),
-        ))
-    }
-
-    /// This links the last point in the path to create a full polygon
-    pub fn to_poly(&self) -> Polygon {
-        Polygon::new(PlotPoints::from_iter(
-            self.points
-                .iter()
-                .chain(vec![&self.points[0]])
-                .map(|p| p.to_arr()),
-        ))
-    }
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-pub struct Circle {
-    pub centre: Point,
-    pub radius: f64,
-}
-
-// impl Circle {
-
-// }
 
 pub fn xy_bounds_check(x_min: f64, x_max: f64, y_min: f64, y_max: f64, p: Point) -> bool {
     p.x > x_min && p.x < x_max && p.y > y_min && p.y < y_max
@@ -301,14 +373,14 @@ pub fn translate_points(points: &mut Vec<Point>, dx: f64, dy: f64) {
     }
 }
 
-pub fn scale_points(points: &mut Vec<Point>, centre: &Point, scale: f64) {
+pub fn scale_points(points: &mut Vec<Point>, centre: Point, scale: f64) {
     for point in points.iter_mut() {
         point.x = ((point.x - centre.x) * scale) + centre.x;
         point.y = ((point.y - centre.y) * scale) + centre.y;
     }
 }
 
-pub fn rotate_points(points: &mut Vec<Point>, centre: &Point, angle: f64) {
+pub fn rotate_points(points: &mut Vec<Point>, centre: Point, angle: f64) {
     let (sin, cos) = (angle.sin(), angle.cos());
 
     for point in points.iter_mut() {
@@ -352,11 +424,11 @@ mod tests {
     fn print_intersections() {
         let p1 = Point::new(10.0, 5.0);
         let p2 = Point::new(20.0, 10.0);
-        let rect = Rectangle::from(&p1, &p2);
+        let rect = Rectangle::from(p1, p2);
 
         let p3 = Point::new(50.0, 20.0);
         let p4 = Point::new(7.0, 5.0);
-        let s1 = Segment::new(&p3, &p4);
+        let s1 = Segment::new(p3, p4);
 
         println!("Gradient = {}", s1.gradient());
         println!("Find where x = 12, y = {}", s1.find_y(12.0));
@@ -378,7 +450,7 @@ mod tests {
         let line_p1 = Point { x: 1.0, y: 1.0 };
         let line_p2 = Point { x: 4.0, y: 2.0 };
 
-        mirror_points(&mut points, Segment::new(&line_p1, &line_p2));
+        mirror_points(&mut points, Segment::new(line_p1, line_p2));
         let mirrored = points[0];
 
         // Expected mirrored point is (4.4, -0.2)
@@ -402,7 +474,7 @@ mod tests {
         let line_p1 = Point { x: 0.0, y: 2.0 };
         let line_p2 = Point { x: 5.0, y: 2.0 };
 
-        mirror_points(&mut points, Segment::new(&line_p1, &line_p2));
+        mirror_points(&mut points, Segment::new(line_p1, line_p2));
         let mirrored = points[0];
         let expected = Point { x: 3.0, y: 0.0 };
 
@@ -423,7 +495,7 @@ mod tests {
         let line_p1 = Point { x: 2.0, y: 0.0 };
         let line_p2 = Point { x: 2.0, y: 5.0 };
 
-        mirror_points(&mut points, Segment::new(&line_p1, &line_p2));
+        mirror_points(&mut points, Segment::new(line_p1, line_p2));
         let mirrored = points[0];
         let expected = Point { x: 1.0, y: 4.0 };
 
