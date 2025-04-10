@@ -1,12 +1,12 @@
 use std::f64::{consts::PI, EPSILON};
 
-use egui::{vec2, Align2, Color32, Frame, RichText, Stroke, Ui};
-use egui_plot::{Line, Plot, PlotItem, PlotPoint, PlotPoints, PlotUi, Polygon, Text};
+use egui::{epaint::CircleShape, vec2, Align2, Color32, Frame, RichText, Stroke, Ui};
+use egui_plot::{Line, LineStyle, Plot, PlotItem, PlotPoint, PlotPoints, PlotUi, Polygon, Text};
 
 use super::{
     component::Component,
     feature::Feature,
-    geometry::{Circle, Path, Point, Rectangle, Segment},
+    geometry::{Circle, Path, Point, Rectangle, Segment, SineSegment},
     utils::text_width,
 };
 
@@ -53,7 +53,7 @@ pub fn side_by_side(ui: &mut Ui, left_component: &Component, right_component: &C
             if component.outer_diameter.enabled {
                 denominator = denominator.max(component.outer_diameter.size);
             } else {
-                denominator = denominator.max(component.inner_diameter.size);
+                denominator = denominator.max(1.5 * component.inner_diameter.size);
             }
         }
 
@@ -100,6 +100,19 @@ pub fn side_by_side(ui: &mut Ui, left_component: &Component, right_component: &C
                     centre_view(ui, &style, left_component, right_component, centre);
 
                     end_view(ui, &style, right_component, right_centre, right_text, true);
+
+                    let p1 = Point::new(-50.0, 20.0);
+                    let p2 = Point::new(30.0, -10.0);
+
+                    let test = SineSegment {
+                        p1,
+                        p2,
+                        a: 10.0,
+                        n: 1.0,
+                    };
+                    let seg = Segment::new(p1, p2);
+                    ui.line(test.to_line());
+                    ui.line(seg.to_line());
                 });
         });
 }
@@ -148,16 +161,17 @@ pub fn end_view(
     right: bool,
 ) {
     let mut centre_size = 0.0f64;
+    let line = Stroke {
+        width: style.line_width,
+        color: style.line_colour,
+    };
 
     if component.outer_diameter.enabled {
         // Outer circle
         ui.polygon(
             Circle::new(centre, 0.5 * style.scale * component.outer_diameter.size)
                 .to_poly()
-                .stroke(Stroke {
-                    width: style.line_width,
-                    color: style.line_colour,
-                })
+                .stroke(line)
                 .fill_color(Color32::TRANSPARENT),
         );
 
@@ -172,6 +186,20 @@ pub fn end_view(
         );
 
         centre_size = centre_size.max(component.outer_diameter.size);
+    } else if !component.outer_diameter.primary {
+        // Create boundary
+        let boundary_size = style.scale * component.inner_diameter.size;
+        let (mut p1, mut p2) = (centre, centre);
+        p1.x -= boundary_size;
+        p2.x += boundary_size;
+        p1.rotate(centre, 45.0);
+        p2.rotate(centre, 45.0);
+        ui.polygon(
+            Rectangle::from(p1, p2)
+                .to_poly()
+                .stroke(line)
+                .style(LineStyle::dashed_dense()),
+        );
     }
 
     if component.inner_diameter.enabled {
@@ -179,10 +207,7 @@ pub fn end_view(
         ui.polygon(
             Circle::new(centre, 0.5 * style.scale * component.inner_diameter.size)
                 .to_poly()
-                .stroke(Stroke {
-                    width: style.line_width,
-                    color: style.line_colour,
-                })
+                .stroke(line)
                 .fill_color(Color32::TRANSPARENT),
         );
 
@@ -287,13 +312,13 @@ pub fn hatched_section(ui: &mut PlotUi, style: &Style, mut angle: f64, p1: Point
     // HATCHING MOVES WITH SIZE CHANGE... CAUSE IS FROM_CENTRE METHOD
 
     for _ in 0..2 {
-        let mut hatch = Segment::from_centre(section.centre(), 10.0, angle);
+        let mut hatch = Segment::from_point_length(section.centre(), 10.0, angle);
 
         while let Some(intersections) = hatching.intersections(&hatch) {
             let [p1, p2, ..] = intersections.as_slice() else {
                 break; // Moves on if there aren't two intersection points
             };
-            let points = PlotPoints::new(vec![p1.as_array(), p2.as_array()]);
+            let points = PlotPoints::new(vec![p1.to_array(), p2.to_array()]);
 
             ui.line(Line::new(points).stroke(Stroke {
                 width: style.hatch_width,
@@ -341,7 +366,7 @@ pub fn diameter_limits(
     } else {
         // Converts the current position to screen coordinates, offsets left by the width
         // of the text and then converts back with the horizontal padding
-        let mut offsetting_point = ui.screen_from_plot(diameter_pos.as_plotpoint());
+        let mut offsetting_point = ui.screen_from_plot(diameter_pos.to_plotpoint());
         offsetting_point.x -= text_width(&ui.ctx(), &upper_text).x;
         diameter_pos.x = ui.plot_from_screen(offsetting_point).x - h_pad;
     }
@@ -364,7 +389,7 @@ pub fn diameter_limits(
     // Closure to draw text at a given position with the specified text.
     let mut draw_text = |pos: Point, text| {
         ui.text(
-            Text::new(pos.as_plotpoint(), RichText::new(text).size(13.0))
+            Text::new(pos.to_plotpoint(), RichText::new(text).size(13.0))
                 .anchor(Align2::LEFT_CENTER),
         );
     };
@@ -517,9 +542,9 @@ pub fn plot_arrow_leader(ui: &mut PlotUi, line: Stroke, mut tip: Point, knee: Po
     tip.vector_offset(angle, 0.5); // This is to stop the square line blunting the arrow tip
     ui.line(
         Line::new(PlotPoints::new(vec![
-            tip.as_array(),
-            knee.as_array(),
-            end.as_array(),
+            tip.to_array(),
+            knee.to_array(),
+            end.to_array(),
         ]))
         .stroke(line),
     );

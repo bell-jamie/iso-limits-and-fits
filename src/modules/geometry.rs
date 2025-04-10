@@ -30,6 +30,13 @@ impl Point {
         self.x = -self.x;
     }
 
+    pub fn rotate(&mut self, centre: Point, angle: f64) {
+        let (sin, cos) = (angle.to_radians().sin(), angle.to_radians().cos());
+        let (x, y) = (self.x, self.y); // Must be cached to avoid x contaminating y
+        self.x = centre.x + (x - centre.x) * cos - (y - centre.y) * sin;
+        self.y = centre.y + (x - centre.x) * sin + (y - centre.y) * cos;
+    }
+
     pub fn offset(&mut self, dx: f64, dy: f64) {
         self.x += dx;
         self.y += dy;
@@ -41,15 +48,15 @@ impl Point {
         self.offset(dx, dy);
     }
 
-    pub fn as_array(self) -> [f64; 2] {
+    pub fn to_array(self) -> [f64; 2] {
         [self.x, self.y]
     }
 
-    pub fn as_tuple(self) -> (f64, f64) {
+    pub fn to_tuple(self) -> (f64, f64) {
         (self.x, self.y)
     }
 
-    pub fn as_plotpoint(self) -> PlotPoint {
+    pub fn to_plotpoint(self) -> PlotPoint {
         PlotPoint {
             x: self.x,
             y: self.y,
@@ -57,7 +64,7 @@ impl Point {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Copy, Serialize, Deserialize)]
 pub struct Segment {
     pub p1: Point,
     pub p2: Point,
@@ -86,7 +93,7 @@ impl Segment {
         Segment::new(Point::new(-1.0, y), Point::new(1.0, y))
     }
 
-    pub fn from_centre(centre: Point, length: f64, angle: f64) -> Self {
+    pub fn from_point_length(centre: Point, length: f64, angle: f64) -> Self {
         let mut horizontal = Segment::new(
             Point::new(centre.x - length / 2.0, centre.y),
             Point::new(centre.x + length / 2.0, centre.y),
@@ -96,8 +103,12 @@ impl Segment {
     }
 
     pub fn rotate(&mut self, centre: Point, angle: f64) {
+        self.rad_rotate(centre, angle.to_radians());
+    }
+
+    pub fn rad_rotate(&mut self, centre: Point, angle: f64) {
         let mut points = vec![self.p1, self.p2];
-        rotate_points(&mut points, centre, angle.to_radians());
+        rotate_points(&mut points, centre, angle);
         (self.p1, self.p2) = (points[0], points[1]);
     }
 
@@ -113,12 +124,46 @@ impl Segment {
         self.offset(dx, dy);
     }
 
+    pub fn length(&self) -> f64 {
+        let dx = self.p2.x - self.p1.x;
+        let dy = self.p2.y - self.p1.y;
+        (dx * dx + dy * dy).sqrt()
+    }
+
+    pub fn centre(&self) -> Point {
+        Point::new((self.p1.x + self.p2.x) / 2.0, (self.p1.y + self.p2.y) / 2.0)
+    }
+
     pub fn gradient(&self) -> f64 {
         let dx = self.p2.x - self.p1.x;
         if dx.abs() < EPS {
             f64::INFINITY
         } else {
             (self.p2.y - self.p1.y) / dx
+        }
+    }
+
+    /// Returns radians
+    pub fn inclination(&self) -> f64 {
+        let dx = self.p2.x - self.p1.x;
+        let dy = self.p2.y - self.p1.y;
+        (dy / dx).atan()
+    }
+
+    pub fn intersect(&self, mut s: Segment) -> Option<Point> {
+        let mut trf = self.clone(); // Copy to transform
+        let pivot = self.midpoint();
+        let angle = -s.inclination();
+        trf.rad_rotate(pivot, angle);
+        s.rad_rotate(pivot, angle);
+        let t = (s.p1.y - trf.p1.y) / (trf.p2.y - trf.p1.y);
+
+        if t < 0.0 || t > 1.0 {
+            None
+        } else {
+            let ix = self.p1.x + t * (self.p2.x - self.p1.x);
+            let iy = self.p1.y + t * (self.p2.y - self.p1.y);
+            Some(Point::new(ix, iy))
         }
     }
 
@@ -152,9 +197,42 @@ impl Segment {
 
     pub fn to_line(&self) -> Line {
         Line::new(PlotPoints::from(vec![
-            self.p1.as_array(),
-            self.p2.as_array(),
+            self.p1.to_array(),
+            self.p2.to_array(),
         ]))
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct SineSegment {
+    pub p1: Point,
+    pub p2: Point,
+    pub a: f64,
+    pub n: f64,
+}
+
+impl SineSegment {
+    pub fn to_line(&self) -> Line {
+        let segment = Segment::new(self.p1, self.p2);
+        let length = segment.length();
+        let centre = segment.centre();
+        let cx = (self.n) / RESOLUTION as f64;
+        let cy = 2.0 * PI;
+        let mut path = Path {
+            points: (0..RESOLUTION)
+                .map(|i| {
+                    let x = cx * i as f64;
+                    let y = self.a * (cy * x).sin();
+                    Point::new(x, y)
+                })
+                .collect::<Vec<Point>>(),
+        };
+
+        path.translate(-0.5, 0.0); // Accounts for starting at origin
+        path.translate(centre.x, centre.y);
+        path.xy_scale(centre, length, 1.0);
+        path.rad_rotate(centre, segment.inclination());
+        path.to_line()
     }
 }
 
@@ -169,7 +247,11 @@ impl Path {
     // }
 
     pub fn rotate(&mut self, centre: Point, angle: f64) {
-        rotate_points(&mut self.points, centre, angle.to_radians());
+        self.rad_rotate(centre, angle.to_radians());
+    }
+
+    pub fn rad_rotate(&mut self, centre: Point, angle: f64) {
+        rotate_points(&mut self.points, centre, angle);
     }
 
     pub fn translate(&mut self, dx: f64, dy: f64) {
@@ -177,7 +259,11 @@ impl Path {
     }
 
     pub fn scale(&mut self, centre: Point, scale: f64) {
-        scale_points(&mut self.points, centre, scale);
+        xy_scale_points(&mut self.points, centre, scale, scale);
+    }
+
+    pub fn xy_scale(&mut self, centre: Point, x_scale: f64, y_scale: f64) {
+        xy_scale_points(&mut self.points, centre, x_scale, y_scale);
     }
 
     pub fn mirror_in_x(&mut self) {
@@ -190,7 +276,7 @@ impl Path {
 
     pub fn to_line(&self) -> Line {
         Line::new(PlotPoints::from_iter(
-            self.points.iter().map(|p| p.as_array()),
+            self.points.iter().map(|p| p.to_array()),
         ))
     }
 
@@ -200,7 +286,7 @@ impl Path {
             self.points
                 .iter()
                 .chain(vec![&self.points[0]])
-                .map(|p| p.as_array()),
+                .map(|p| p.to_array()),
         ))
     }
 }
@@ -217,22 +303,23 @@ impl Circle {
     }
 
     pub fn to_poly(&self) -> Polygon {
-        let mut points = Vec::with_capacity(RESOLUTION);
-
-        for i in 0..RESOLUTION {
-            let theta = 2.0 * std::f64::consts::PI * (i as f64 / RESOLUTION as f64);
-            let x = self.centre.x + self.radius * theta.cos();
-            let y = self.centre.y + self.radius * theta.sin();
-            points.push([x, y]);
-        }
-
-        Polygon::new(PlotPoints::from(points))
+        Polygon::new(PlotPoints::from(
+            (0..RESOLUTION)
+                .map(|i| {
+                    let theta = 2.0 * std::f64::consts::PI * (i as f64 / RESOLUTION as f64);
+                    [
+                        self.centre.x + self.radius * theta.cos(),
+                        self.centre.y + self.radius * theta.sin(),
+                    ]
+                })
+                .collect::<Vec<[f64; 2]>>(),
+        ))
     }
 
     pub fn intersections(&self, segment: &Segment) -> Option<Vec<Point>> {
-        let (x1, y1) = segment.p1.as_tuple();
-        let (x2, y2) = segment.p2.as_tuple();
-        let (cx, cy) = self.centre.as_tuple();
+        let (x1, y1) = segment.p1.to_tuple();
+        let (x2, y2) = segment.p2.to_tuple();
+        let (cx, cy) = self.centre.to_tuple();
 
         let dx = x2 - x1;
         let dy = y2 - y1;
@@ -373,10 +460,10 @@ pub fn translate_points(points: &mut Vec<Point>, dx: f64, dy: f64) {
     }
 }
 
-pub fn scale_points(points: &mut Vec<Point>, centre: Point, scale: f64) {
+pub fn xy_scale_points(points: &mut Vec<Point>, centre: Point, x_scale: f64, y_scale: f64) {
     for point in points.iter_mut() {
-        point.x = ((point.x - centre.x) * scale) + centre.x;
-        point.y = ((point.y - centre.y) * scale) + centre.y;
+        point.x = ((point.x - centre.x) * x_scale) + centre.x;
+        point.y = ((point.y - centre.y) * y_scale) + centre.y;
     }
 }
 
@@ -384,7 +471,7 @@ pub fn rotate_points(points: &mut Vec<Point>, centre: Point, angle: f64) {
     let (sin, cos) = (angle.sin(), angle.cos());
 
     for point in points.iter_mut() {
-        let (x, y) = (point.x, point.y);
+        let (x, y) = (point.x, point.y); // Must be cached to avoid x contaminating y
         point.x = centre.x + (x - centre.x) * cos - (y - centre.y) * sin;
         point.y = centre.y + (x - centre.x) * sin + (y - centre.y) * cos;
     }
