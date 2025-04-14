@@ -132,6 +132,11 @@ impl Component {
                             self.outer_diameter.size = state.synced_size;
                         }
                     }
+
+                    // Automatic scaling based on enabled feature
+                    if !self.outer_diameter.enabled {
+                        self.outer_diameter.size = self.inner_diameter.size * 1.5;
+                    }
                 });
             });
     }

@@ -143,11 +143,11 @@ impl Segment {
         }
     }
 
-    /// Returns radians
+    /// Returns radians [-π, π]
     pub fn inclination(&self) -> f64 {
         let dx = self.p2.x - self.p1.x;
         let dy = self.p2.y - self.p1.y;
-        (dy / dx).atan()
+        dy.atan2(dx)
     }
 
     pub fn intersect(&self, mut s: Segment) -> Option<Point> {
@@ -205,19 +205,25 @@ impl Segment {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct SineSegment {
-    pub p1: Point,
-    pub p2: Point,
+    pub s: Segment,
     pub a: f64,
     pub n: f64,
 }
 
 impl SineSegment {
-    pub fn to_line(&self) -> Line {
-        let segment = Segment::new(self.p1, self.p2);
-        let length = segment.length();
-        let centre = segment.centre();
-        let cx = (self.n) / RESOLUTION as f64;
-        let cy = 2.0 * PI;
+    pub fn new(p1: Point, p2: Point, a: f64, n: f64) -> Self {
+        Self {
+            s: Segment::new(p1, p2),
+            a,
+            n,
+        }
+    }
+
+    pub fn to_path(&self) -> Path {
+        let length = self.s.length();
+        let centre = self.s.centre();
+        let cx = 1.0 / RESOLUTION as f64;
+        let cy = self.n * 2.0 * PI;
         let mut path = Path {
             points: (0..RESOLUTION)
                 .map(|i| {
@@ -231,9 +237,28 @@ impl SineSegment {
         path.translate(-0.5, 0.0); // Accounts for starting at origin
         path.translate(centre.x, centre.y);
         path.xy_scale(centre, length, 1.0);
-        path.rad_rotate(centre, segment.inclination());
-        path.to_line()
+        path.rad_rotate(centre, self.s.inclination());
+        path
     }
+
+    pub fn inclination(&self) -> f64 {
+        self.s.inclination()
+    }
+
+    // Here I want to implement a function that finds the required
+    // transformation to get into the sine segment's local coordinate
+    // system. The segment is then transformed. By picking a starting point
+    // on the segment, the point can be checked whether it is above or below
+    // the sine segment. It can then be walked towards the segment to
+    // find the root or intersection.
+
+    // Some alternative approach could be to create a very coarse sine segment
+    // and test for intersections on each interval, storing the
+    // t range. After each round, refine the t range and look for the
+    // intersections again, repeating and repeating until the intersecting
+    // segment is resolution length
+
+    // pub fn intersections(&self, segment: Segment)
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -272,6 +297,42 @@ impl Path {
 
     pub fn mirror_in_y(&mut self) {
         mirror_points_in_y(&mut self.points);
+    }
+
+    pub fn insert(&mut self, i: usize, sub: Path) {
+        self.points.splice(i..i, sub.points);
+    }
+
+    pub fn point(&self, i: usize) -> Option<Point> {
+        self.points.get(i).copied()
+    }
+
+    pub fn segments(&self, closed: bool) -> Vec<Segment> {
+        if self.points.is_empty() {
+            return Vec::new();
+        }
+        let n = self.points.len();
+        let mut segments = Vec::with_capacity(n - 1);
+        for pair in self.points.windows(2) {
+            segments.push(Segment::new(pair[0], pair[1]))
+        }
+
+        // Closed path profile, connect last and first points
+        if n > 1 && closed {
+            segments.push(Segment::new(self.points[n - 1], self.points[0]));
+        }
+        segments
+    }
+
+    pub fn intersections(&self, segment: Segment, closed: bool) -> Vec<Point> {
+        self.segments(closed)
+            .into_iter()
+            .fold(Vec::new(), |mut vec, edge| {
+                if let Some(intersection) = edge.intersect(segment) {
+                    vec.push(intersection);
+                }
+                vec
+            })
     }
 
     pub fn to_line(&self) -> Line {
@@ -355,103 +416,76 @@ impl Circle {
             }
         }
     }
-}
 
-#[derive(Clone, Serialize, Deserialize)]
-pub struct Rectangle {
-    pub x1: f64,
-    pub x2: f64,
-    pub y1: f64,
-    pub y2: f64,
-}
-
-impl Rectangle {
-    pub fn from(p1: Point, p2: Point) -> Self {
-        let x1 = p1.x.min(p2.x);
-        let x2 = p1.x.max(p2.x);
-        let y1 = p1.y.min(p2.y);
-        let y2 = p1.y.max(p2.y);
-
-        Self { x1, x2, y1, y2 }
-    }
-
-    pub fn new(p1: [f64; 2], p2: [f64; 2]) -> Self {
-        Rectangle::from(Point::from(p1), Point::from(p2))
-    }
-
-    pub fn scale(&mut self, scale: f64) {
-        let cx = (self.x1 + self.x2) / 2.0; // X centre
-        let cy = (self.y1 + self.y2) / 2.0; // Y centre
-
-        self.x1 += (scale - 1.0) * (self.x1 - cx);
-        self.y1 += (scale - 1.0) * (self.y1 - cy);
-        self.x2 += (scale - 1.0) * (self.x2 - cx);
-        self.y2 += (scale - 1.0) * (self.y2 - cy);
-    }
-
-    pub fn offset(&mut self, offset: f64) {
-        self.x1 -= offset;
-        self.y1 -= offset;
-        self.x2 += offset;
-        self.y2 += offset;
-    }
-
-    pub fn to_vec(&self) -> Vec<[f64; 2]> {
-        vec![
-            [self.x1, self.y2],
-            [self.x1, self.y1],
-            [self.x2, self.y1],
-            [self.x2, self.y2],
-            [self.x1, self.y2],
-        ]
-    }
-
-    pub fn centre(&self) -> Point {
-        let x = self.x1 + self.width() / 2.0;
-        let y = self.y1 + self.height() / 2.0;
-        Point { x, y }
-    }
-
-    pub fn width(&self) -> f64 {
-        self.x2 - self.x1
-    }
-
-    pub fn height(&self) -> f64 {
-        self.y2 - self.y1
-    }
-
-    pub fn to_poly(&self) -> Polygon {
-        Polygon::new(PlotPoints::new(self.to_vec()))
-    }
-
-    pub fn intersections(&self, segment: &Segment) -> Option<Vec<Point>> {
-        let bounds_x = self.x1..=self.x2;
-        let bounds_y = self.y1..=self.y2;
-
-        let candidates = [
-            (segment.find_x(self.y1), self.y1),
-            (segment.find_x(self.y2), self.y2),
-            (self.x1, segment.find_y(self.x1)),
-            (self.x2, segment.find_y(self.x2)),
-        ];
-
-        let intersections = candidates
-            .into_iter()
-            .filter(|&(x, y)| bounds_x.contains(&x) && bounds_y.contains(&y))
-            .map(|(x, y)| Point::new(x, y))
-            .collect::<Vec<Point>>();
-
-        if intersections.is_empty() {
-            None
-        } else {
-            Some(intersections)
+    /// Temporary
+    pub fn to_path(&self) -> Path {
+        Path {
+            points: (0..RESOLUTION)
+                .map(|i| {
+                    let theta = 2.0 * std::f64::consts::PI * (i as f64 / RESOLUTION as f64);
+                    Point::new(
+                        self.centre.x + self.radius * theta.cos(),
+                        self.centre.y + self.radius * theta.sin(),
+                    )
+                })
+                .collect::<Vec<Point>>(),
         }
     }
 }
 
-pub fn xy_bounds_check(x_min: f64, x_max: f64, y_min: f64, y_max: f64, p: Point) -> bool {
-    p.x > x_min && p.x < x_max && p.y > y_min && p.y < y_max
+#[derive(Clone, Serialize, Deserialize)]
+pub struct Rectangle {
+    pub path: Path,
 }
+
+impl Rectangle {
+    /// This function assumes a horizontal rectangle
+    pub fn from_2(p1: Point, p3: Point) -> Self {
+        let p2 = Point::new(p1.x, p3.y);
+        let p4 = Point::new(p3.x, p1.y);
+        let path = Path {
+            points: vec![p1, p2, p3, p4],
+        };
+
+        Self { path }
+    }
+
+    pub fn new(p1: [f64; 2], p2: [f64; 2]) -> Self {
+        Rectangle::from_2(Point::from(p1), Point::from(p2))
+    }
+
+    pub fn scale(&mut self, scale: f64) {
+        self.path.scale(self.centre(), scale);
+    }
+
+    pub fn offset(&mut self, offset: f64) {
+        let width = self.width();
+        let height = self.height();
+        let x_scale = (width + offset) / width;
+        let y_scale = (height + offset) / height;
+        self.path.xy_scale(self.centre(), x_scale, y_scale);
+    }
+
+    pub fn centre(&self) -> Point {
+        Segment::new(self.path.point(0).unwrap(), self.path.point(2).unwrap()).centre()
+    }
+
+    pub fn width(&self) -> f64 {
+        Segment::new(self.path.point(1).unwrap(), self.path.point(2).unwrap()).length()
+    }
+
+    pub fn height(&self) -> f64 {
+        Segment::new(self.path.point(0).unwrap(), self.path.point(1).unwrap()).length()
+    }
+
+    pub fn to_poly(&self) -> Polygon {
+        self.path.to_poly()
+    }
+}
+
+// pub fn xy_bounds_check(x_min: f64, x_max: f64, y_min: f64, y_max: f64, p: Point) -> bool {
+//     p.x > x_min && p.x < x_max && p.y > y_min && p.y < y_max
+// }
 
 pub fn translate_points(points: &mut Vec<Point>, dx: f64, dy: f64) {
     for point in points.iter_mut() {
@@ -511,7 +545,7 @@ mod tests {
     fn print_intersections() {
         let p1 = Point::new(10.0, 5.0);
         let p2 = Point::new(20.0, 10.0);
-        let rect = Rectangle::from(p1, p2);
+        let rect = Rectangle::from_2(p1, p2);
 
         let p3 = Point::new(50.0, 20.0);
         let p4 = Point::new(7.0, 5.0);
@@ -520,7 +554,9 @@ mod tests {
         println!("Gradient = {}", s1.gradient());
         println!("Find where x = 12, y = {}", s1.find_y(12.0));
 
-        if let Some(ints) = rect.intersections(&s1) {
+        let ints = rect.path.intersections(s1, true);
+
+        if !ints.is_empty() {
             for (i, int) in ints.iter().enumerate() {
                 println!("Intersection {i} - x: {}, y: {}", int.x, int.y);
             }

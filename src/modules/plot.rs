@@ -2,6 +2,7 @@ use std::f64::{consts::PI, EPSILON};
 
 use egui::{epaint::CircleShape, vec2, Align2, Color32, Frame, RichText, Stroke, Ui};
 use egui_plot::{Line, LineStyle, Plot, PlotItem, PlotPoint, PlotPoints, PlotUi, Polygon, Text};
+use serde::Deserialize;
 
 use super::{
     component::Component,
@@ -50,11 +51,12 @@ pub fn side_by_side(ui: &mut Ui, left_component: &Component, right_component: &C
         let mut denominator = 1.0f64;
 
         for component in [left_component, right_component] {
-            if component.outer_diameter.enabled {
-                denominator = denominator.max(component.outer_diameter.size);
-            } else {
-                denominator = denominator.max(1.5 * component.inner_diameter.size);
-            }
+            // if component.outer_diameter.enabled {
+            //     denominator = denominator.max(component.outer_diameter.size);
+            // } else {
+            //     denominator = denominator.max(1.5 * component.inner_diameter.size);
+            // }
+            denominator = denominator.max(component.outer_diameter.size);
         }
 
         0.7 * height / denominator
@@ -101,18 +103,20 @@ pub fn side_by_side(ui: &mut Ui, left_component: &Component, right_component: &C
 
                     end_view(ui, &style, right_component, right_centre, right_text, true);
 
-                    let p1 = Point::new(-50.0, 20.0);
-                    let p2 = Point::new(30.0, -10.0);
+                    // let p1 = Point::new(-50.0, 20.0);
+                    // let p2 = Point::new(30.0, -10.0);
+                    // let p3 = Point::new(5.0, -5.0);
 
-                    let test = SineSegment {
-                        p1,
-                        p2,
-                        a: 10.0,
-                        n: 1.0,
-                    };
-                    let seg = Segment::new(p1, p2);
-                    ui.line(test.to_line());
-                    ui.line(seg.to_line());
+                    // let test = SineSegment::new(p1, p2, 10.0, 15.0);
+                    // let seg = Segment::new(p1, p2);
+                    // ui.line(test.to_path().to_line());
+                    // ui.line(seg.to_line());
+
+                    // let intersections = test.to_path().intersections(seg, false);
+
+                    // for int in intersections {
+                    //     ui.polygon(Circle::new(int, 2.0).to_poly());
+                    // }
                 });
         });
 }
@@ -188,17 +192,25 @@ pub fn end_view(
         centre_size = centre_size.max(component.outer_diameter.size);
     } else if !component.outer_diameter.primary {
         // Create boundary
-        let boundary_size = style.scale * component.inner_diameter.size;
-        let (mut p1, mut p2) = (centre, centre);
-        p1.x -= boundary_size;
-        p2.x += boundary_size;
-        p1.rotate(centre, 45.0);
-        p2.rotate(centre, 45.0);
+        // let boundary_size = component.outer_diameter.size; //style.scale * component.inner_diameter.size;
+        // let (mut p1, mut p2) = (centre, centre);
+        // p1.x -= boundary_size;
+        // p2.x += boundary_size;
+        // p1.rotate(centre, 45.0);
+        // p2.rotate(centre, 45.0);
+        // ui.polygon(
+        //     Rectangle::from_2(p1, p2)
+        //         .to_poly()
+        //         .stroke(line)
+        //         .style(LineStyle::dashed_dense()),
+        // );
+
         ui.polygon(
-            Rectangle::from(p1, p2)
+            Circle::new(centre, 0.5 * style.scale * component.outer_diameter.size)
                 .to_poly()
                 .stroke(line)
-                .style(LineStyle::dashed_dense()),
+                .style(LineStyle::dashed_dense())
+                .fill_color(Color32::TRANSPARENT),
         );
     }
 
@@ -240,81 +252,184 @@ pub fn centre_view(
     centre: Point,
 ) {
     // Aspect ratio will be 1:1 for length to height
-    let right = if left_component.outer_diameter.enabled {
-        0.5 * style.scale * left_component.outer_diameter.size
-    } else {
-        0.5 * style.scale * left_component.inner_diameter.size
-    };
+    // let right = if left_component.outer_diameter.enabled {
+    //     0.5 * style.scale * left_component.outer_diameter.size
+    // } else {
+    //     0.5 * style.scale * left_component.inner_diameter.size
+    // };
+    let right = 0.5 * style.scale * left_component.outer_diameter.size;
     let left = -right;
 
-    if left_component.outer_diameter.enabled {
-        let upper = style.scale * left_component.outer_diameter.size / 2.0;
-        let lower = style.scale * left_component.inner_diameter.size / 2.0;
+    let mut p1 = Point::new(
+        left,
+        style.scale * left_component.outer_diameter.middle_limit(None) / 2.0,
+    );
+    let mut p2 = Point::new(
+        right,
+        style.scale * left_component.inner_diameter.middle_limit(None) / 2.0,
+    );
 
-        let mut p1 = Point::new(left, upper);
-        let mut p2 = Point::new(right, lower);
+    hatched_section(
+        ui,
+        style,
+        45.0,
+        p1,
+        p2,
+        !left_component.outer_diameter.enabled,
+    ); // upper rect
 
-        hatched_section(ui, style, 45.0, p1, p2); // upper rect
+    p1.mirror_in_x();
+    p2.mirror_in_x();
 
-        p1.mirror_in_x();
-        p2.mirror_in_x();
-
-        hatched_section(ui, style, 45.0, p1, p2); // lower rect
-    }
+    hatched_section(
+        ui,
+        style,
+        45.0,
+        p1,
+        p2,
+        !left_component.outer_diameter.enabled,
+    ); // lower rect
 
     if right_component.inner_diameter.enabled {
-        let upper = style.scale * right_component.outer_diameter.size / 2.0;
-        let lower = style.scale * right_component.inner_diameter.size / 2.0;
+        let mut p1 = Point::new(
+            left,
+            style.scale * right_component.outer_diameter.middle_limit(None) / 2.0,
+        );
+        let mut p2 = Point::new(
+            right,
+            style.scale * right_component.inner_diameter.middle_limit(None) / 2.0,
+        );
 
-        let mut p1 = Point::new(left, upper);
-        let mut p2 = Point::new(right, lower);
-
-        hatched_section(ui, style, -45.0, p1, p2); // upper rect
+        hatched_section(ui, style, -45.0, p1, p2, false); // upper rect
 
         p1.mirror_in_x();
         p2.mirror_in_x();
 
-        hatched_section(ui, style, -45.0, p1, p2);
+        hatched_section(ui, style, -45.0, p1, p2, false);
     // lower rect
     } else {
-        let upper = style.scale * right_component.outer_diameter.size / 2.0;
-        let lower = -upper;
+        let p1 = Point::new(
+            left,
+            style.scale * right_component.outer_diameter.middle_limit(None) / 2.0,
+        );
+        let p2 = Point::new(
+            right,
+            -style.scale * right_component.outer_diameter.middle_limit(None) / 2.0,
+        );
 
-        let p1 = Point::new(left, upper);
-        let p2 = Point::new(right, lower);
+        hatched_section(ui, style, -45.0, p1, p2, false);
+    }
 
-        hatched_section(ui, style, -45.0, p1, p2);
+    // Interference
+    if left_component.inner_diameter.middle_limit(None)
+        < right_component.outer_diameter.middle_limit(None)
+    {
+        let mut p1 = Point::new(
+            left,
+            0.5 * style.scale * right_component.outer_diameter.middle_limit(None),
+        );
+        let mut p2 = Point::new(
+            right,
+            0.5 * style.scale * left_component.inner_diameter.middle_limit(None),
+        );
+
+        ui.polygon(
+            Rectangle::from_2(p1, p2)
+                .to_poly()
+                .stroke(Stroke {
+                    width: 0.0,
+                    color: Color32::TRANSPARENT,
+                })
+                .fill_color(Color32::RED),
+        );
+
+        p1.mirror_in_x();
+        p2.mirror_in_x();
+
+        ui.polygon(
+            Rectangle::from_2(p1, p2)
+                .to_poly()
+                .stroke(Stroke {
+                    width: 0.0,
+                    color: Color32::TRANSPARENT,
+                })
+                .fill_color(Color32::RED),
+        );
     }
 
     plot_centreline(ui, style, centre, right, 0.0);
 }
 
-pub fn hatched_section(ui: &mut PlotUi, style: &Style, mut angle: f64, p1: Point, p2: Point) {
+pub fn hatched_section(
+    ui: &mut PlotUi,
+    style: &Style,
+    mut angle: f64,
+    p1: Point,
+    p2: Point,
+    broken: bool,
+) {
     // Create section outline and bounding box for the hatching
-    let section = Rectangle::from(p1, p2);
+    let mut section = Rectangle::from_2(p1, p2);
     let mut hatching = section.clone();
     hatching.offset(-style.hatch_padding); // Add padding to hatching
 
     // ui.polygon(hatching.to_poly()); // Uncomment to show hatching outline
 
-    // Drawing section outline
-    ui.polygon(
-        section
-            .to_poly()
-            .fill_color(Color32::TRANSPARENT)
-            .stroke(Stroke {
+    if broken {
+        // Draw main edges
+        for edge in section.path.segments(false) {
+            ui.line(edge.to_line().stroke(Stroke {
                 width: style.line_width,
                 color: style.line_colour,
-            }),
-    );
+            }));
+        }
 
-    // HATCHING AT 90º CURRENTLY BROKEN
+        let section_sine = SineSegment {
+            s: section.path.segments(true)[3],
+            a: 1.5,
+            n: 1.0,
+        };
+        let hatching_sine = SineSegment {
+            s: hatching.path.segments(true)[3],
+            a: 1.5,
+            n: 1.0,
+        };
+
+        section.path.insert(4, section_sine.to_path());
+        hatching.path.insert(4, hatching_sine.to_path());
+
+        // Draw sine edge
+        ui.line(
+            section_sine
+                .to_path()
+                .to_line()
+                .stroke(Stroke {
+                    width: style.line_width,
+                    color: style.line_colour,
+                })
+                .style(LineStyle::dashed_dense()),
+        );
+    } else {
+        // Drawing section outline
+        ui.polygon(
+            section
+                .path
+                .to_poly()
+                .fill_color(Color32::TRANSPARENT)
+                .stroke(Stroke {
+                    width: style.line_width,
+                    color: style.line_colour,
+                }),
+        );
+    }
+
     // HATCHING MOVES WITH SIZE CHANGE... CAUSE IS FROM_CENTRE METHOD
 
     for _ in 0..2 {
         let mut hatch = Segment::from_point_length(section.centre(), 10.0, angle);
 
-        while let Some(intersections) = hatching.intersections(&hatch) {
+        loop {
+            let intersections = hatching.path.intersections(hatch, true);
             let [p1, p2, ..] = intersections.as_slice() else {
                 break; // Moves on if there aren't two intersection points
             };
