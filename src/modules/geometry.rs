@@ -13,6 +13,13 @@ pub struct Point {
     pub y: f64,
 }
 
+impl std::ops::Sub for Point {
+    type Output = Point;
+    fn sub(self, other: Point) -> Point {
+        Point::new(self.x - other.x, self.y - other.y)
+    }
+}
+
 impl Point {
     pub fn new(x: f64, y: f64) -> Self {
         Self { x, y }
@@ -20,6 +27,14 @@ impl Point {
 
     pub fn from([x, y]: [f64; 2]) -> Self {
         Self { x, y }
+    }
+
+    pub fn cross(self, other: Point) -> f64 {
+        self.x * other.y - self.y * other.x
+    }
+
+    pub fn distance(self, other: Point) -> f64 {
+        Segment::new(self, other).length()
     }
 
     pub fn mirror_in_x(&mut self) {
@@ -150,7 +165,7 @@ impl Segment {
         dy.atan2(dx)
     }
 
-    pub fn intersect(&self, mut s: Segment) -> Option<Point> {
+    pub fn _intersect_old(&self, mut s: Segment) -> Option<Point> {
         let mut trf = self.clone(); // Copy to transform
         let pivot = self.midpoint();
         let angle = -s.inclination();
@@ -165,6 +180,51 @@ impl Segment {
             let iy = self.p1.y + t * (self.p2.y - self.p1.y);
             Some(Point::new(ix, iy))
         }
+    }
+
+    pub fn intersect(self: &Segment, s: Segment) -> Option<Point> {
+        let pivot = self.midpoint();
+        let len = self.length();
+
+        let dx = s.p2.x - s.p1.x;
+        let dy = s.p2.y - s.p1.y;
+        // let len = (dx * dx + dy * dy).sqrt();
+
+        if len < f64::EPSILON {
+            return None; // Avoid degenerate segment
+        }
+
+        // Get rotation frame basis (cos, sin)
+        let cos = dx / len;
+        let sin = dy / len;
+
+        // Define a transform function that rotates a point around the pivot
+        let to_rotated = |p: Point| -> Point {
+            let px = p.x - pivot.x;
+            let py = p.y - pivot.y;
+            Point::new(px * cos + py * sin, -px * sin + py * cos)
+        };
+
+        // Transform self points
+        let p1 = to_rotated(self.p1);
+        let p2 = to_rotated(self.p2);
+        let s1 = to_rotated(s.p1); // s1.y should be ~equal to s2.y
+
+        // Find t such that the interpolated y on (p1, p2) equals s1.y
+        let dy = p2.y - p1.y;
+        if dy.abs() < f64::EPSILON {
+            return None;
+        }
+
+        let t = (s1.y - p1.y) / dy;
+        if t < 0.0 || t > 1.0 {
+            return None;
+        }
+
+        // Interpolate in original space
+        let ix = self.p1.x + t * (self.p2.x - self.p1.x);
+        let iy = self.p1.y + t * (self.p2.y - self.p1.y);
+        Some(Point::new(ix, iy))
     }
 
     pub fn x_intersect(&self) -> f64 {
@@ -221,7 +281,7 @@ impl SineSegment {
 
     pub fn to_path(&self) -> Path {
         let length = self.s.length();
-        let centre = self.s.centre();
+        let midpoint = self.s.midpoint();
         let cx = 1.0 / RESOLUTION as f64;
         let cy = self.n * 2.0 * PI;
         let mut path = Path {
@@ -235,9 +295,9 @@ impl SineSegment {
         };
 
         path.translate(-0.5, 0.0); // Accounts for starting at origin
-        path.translate(centre.x, centre.y);
-        path.xy_scale(centre, length, 1.0);
-        path.rad_rotate(centre, self.s.inclination());
+        path.translate(midpoint.x, midpoint.y);
+        path.xy_scale(midpoint, length, 1.0);
+        path.rad_rotate(midpoint, self.s.inclination());
         path
     }
 
@@ -333,6 +393,57 @@ impl Path {
                 }
                 vec
             })
+    }
+
+    /// This will work by finding the index of the edge where the intersection occured, which will
+    /// map to the indices of the new shorter edges. These are pushed to the next vec for checking.
+    /// This is recursive, dropping the vec each time, until the edge length is below a threshold.
+    /// Then the edge centre is chosen.
+    pub fn fast_intersections(&self, segment: Segment, closed: bool) -> Vec<Vec<Point>> {
+        let mut threshold = 10.0;
+        let mut mask = 0u32;
+        let floor = 1e-3;
+
+        let mut result = Vec::new(); // temp!!
+
+        while threshold > floor {
+            let mut i = 1;
+            let mut points_temp = self
+                .points
+                .clone()
+                .into_iter()
+                .enumerate()
+                .filter(|(idx, _)| (mask >> idx) & 1 == 0)
+                .map(|(_, val)| val)
+                .collect::<Vec<_>>();
+
+            while i < points_temp.len() {
+                let (p1, p2) = (points_temp[i - 1], points_temp[i]);
+
+                if p1.distance(p2) < threshold {
+                    i += 1;
+                } else {
+                    points_temp.remove(i);
+                }
+            }
+
+            let path_temp = Path {
+                points: points_temp,
+            };
+            result.push(path_temp.segments(closed).into_iter().fold(
+                Vec::new(),
+                |mut vec, edge| {
+                    if let Some(intersection) = edge.intersect(segment) {
+                        vec.push(intersection);
+                    }
+                    vec
+                },
+            ));
+
+            threshold /= 10.0;
+        }
+
+        result
     }
 
     pub fn to_line(&self) -> Line {
@@ -467,7 +578,7 @@ impl Rectangle {
     }
 
     pub fn centre(&self) -> Point {
-        Segment::new(self.path.point(0).unwrap(), self.path.point(2).unwrap()).centre()
+        Segment::new(self.path.point(0).unwrap(), self.path.point(2).unwrap()).midpoint()
     }
 
     pub fn width(&self) -> f64 {
@@ -631,5 +742,37 @@ mod tests {
             (mirrored.y - expected.y).abs() < epsilon,
             "Y coordinate mismatch"
         );
+    }
+
+    #[test]
+    fn benchmark_intersection_functions() {
+        let mut a = Segment {
+            p1: Point::new(0.0, 0.0),
+            p2: Point::new(10.0, 10.0),
+        };
+
+        let mut b = Segment {
+            p1: Point::new(0.0, 10.0),
+            p2: Point::new(10.0, 0.0),
+        };
+
+        let iterations = 5_000_000;
+
+        let start_old = std::time::Instant::now();
+        for _ in 0..iterations {
+            let _ = a._intersect_old(b);
+        }
+        let duration_old = start_old.elapsed();
+
+        let start_new = std::time::Instant::now();
+        for _ in 0..iterations {
+            let _ = a.intersect(b);
+        }
+        let duration_new = start_new.elapsed();
+
+        println!("Old version: {:?}", duration_old);
+        println!("New version: {:?}", duration_new);
+
+        assert!(1 == 2)
     }
 }

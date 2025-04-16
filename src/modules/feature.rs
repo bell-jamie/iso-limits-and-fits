@@ -1,11 +1,16 @@
 use egui::{ComboBox, DragValue, Grid, SelectableLabel, Ui};
-// use rand::Rng;
 
 use super::{
     material::Material,
     tolerance::{GradesDeviations, Iso, Tolerance},
     utils::{decimals, State},
 };
+
+// #[derive(Clone, serde::Deserialize, serde::Serialize)]
+// pub enum FeatureType {
+//     Hole,
+//     Shaft,
+// }
 
 #[derive(Clone, serde::Deserialize, serde::Serialize)]
 pub struct Feature {

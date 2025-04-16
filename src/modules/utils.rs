@@ -1,4 +1,4 @@
-use egui::{Context, RichText, Ui, Vec2};
+use egui::{emath, Context, RichText, Ui, Vec2};
 
 #[derive(Clone, serde::Deserialize, serde::Serialize)]
 pub struct State {
@@ -98,6 +98,15 @@ pub fn text_width(ctx: &Context, text: &str) -> Vec2 {
         )
     })
     .size()
+}
+
+/// This function is framerate dependant...
+pub fn lerp_untimed(current: f64, target: f64, rate: f64, tol: f64) -> f64 {
+    if (current - target).abs() > tol {
+        current + rate * (target - current)
+    } else {
+        target
+    }
 }
 
 // pub fn check_width(ui: &mut Ui) {

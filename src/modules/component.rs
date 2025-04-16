@@ -1,5 +1,9 @@
-use super::{feature::Feature, material::Material, utils::State};
-use egui::{Frame, RichText, SelectableLabel, Ui};
+use super::{
+    feature::Feature,
+    material::Material,
+    utils::{lerp_untimed, State},
+};
+use egui::{Frame, Id, RichText, SelectableLabel, Ui};
 
 #[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum Focus {
@@ -133,9 +137,19 @@ impl Component {
                         }
                     }
 
-                    // Automatic scaling based on enabled feature
+                    // Automatic (smooth) scaling based on enabled feature
                     if !self.outer_diameter.enabled {
-                        self.outer_diameter.size = self.inner_diameter.size * 1.5;
+                        let target = (1.5 * self.inner_diameter.size).max(1.0);
+                        let rate = 0.1;
+                        let tolerance = (0.005 * self.inner_diameter.size).max(0.01);
+
+                        let temp = self.outer_diameter.size;
+
+                        self.outer_diameter.size =
+                            lerp_untimed(self.outer_diameter.size, target, rate, tolerance);
+                        if self.outer_diameter.size != temp {
+                            ui.ctx().request_repaint();
+                        }
                     }
                 });
             });

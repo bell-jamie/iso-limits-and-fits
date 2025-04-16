@@ -107,14 +107,14 @@ pub fn side_by_side(ui: &mut Ui, left_component: &Component, right_component: &C
                     // let p2 = Point::new(30.0, -10.0);
                     // let p3 = Point::new(5.0, -5.0);
 
-                    // let test = SineSegment::new(p1, p2, 10.0, 15.0);
+                    // let test = SineSegment::new(p1, p2, 10.0, 2.0);
                     // let seg = Segment::new(p1, p2);
                     // ui.line(test.to_path().to_line());
                     // ui.line(seg.to_line());
 
-                    // let intersections = test.to_path().intersections(seg, false);
+                    // let intersections = test.to_path().fast_intersections(seg, false);
 
-                    // for int in intersections {
+                    // for int in intersections.into_iter().flatten() {
                     //     ui.polygon(Circle::new(int, 2.0).to_poly());
                     // }
                 });

@@ -18,7 +18,7 @@ fn main() -> eframe::Result {
         ..Default::default()
     };
     eframe::run_native(
-        "eframe template",
+        "ISO Limits and Fits Tool",
         native_options,
         Box::new(|cc| Ok(Box::new(iso_limits_and_fits::LimitsFitsApp::new(cc)))),
     )

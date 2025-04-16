@@ -50,17 +50,6 @@ impl eframe::App for LimitsFitsApp {
             // The top panel is often a good place for a menu bar:
 
             egui::menu::bar(ui, |ui| {
-                // NOTE: no File->Quit on web pages!
-                let is_web = cfg!(target_arch = "wasm32");
-                if !is_web {
-                    ui.menu_button("File", |ui| {
-                        if ui.button("Quit").clicked() {
-                            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
-                        }
-                    });
-                    ui.add_space(16.0);
-                }
-
                 egui::widgets::global_theme_preference_switch(ui);
                 self.state.zoom.show(ui, ctx);
 
@@ -135,21 +124,6 @@ impl eframe::App for LimitsFitsApp {
                 let fit = Fit::new(&self.hub, &self.shaft);
                 fit.show(ui, &self.state);
             }
-
-            // ui.add_space(10.0);
-
-            // ui.horizontal(|ui| {
-            //     self.hub.show(ui, &mut self.state);
-
-            //     ui.add_space(10.0);
-
-            //     self.shaft.show(ui, &mut self.state);
-            // });
-
-            // ui.add_space(10.0);
-
-            // let fit = Fit::new(&self.hub, &self.shaft);
-            // fit.show(ui, &self.state);
 
             ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
                 signature(self, ui);
@@ -268,5 +242,11 @@ fn signature(app: &mut LimitsFitsApp, ui: &mut egui::Ui) {
             .on_hover_cursor(egui::CursorIcon::Help)
             .on_hover_text("This is an alpha release, bugs are to be expected — check your work (like Soroush does).\nClick to enable debug mode.")
             .clicked() { app.state.debug = !app.state.debug; }
+        if app.state.debug {
+            ui.add_space(5.0);
+            if ui.ctx().has_requested_repaint() {
+                ui.colored_label(Color32::RED, "Repainting...");
+            }
+        }
     });
 }
