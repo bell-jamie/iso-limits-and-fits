@@ -1,9 +1,13 @@
-use egui::{DragValue, Ui};
+use egui::{Button, DragValue, Frame, Slider, Ui};
 
-use crate::modules::utils::dynamic_precision;
+use super::{
+    component::Component,
+    utils::{dynamic_precision, State},
+};
 
 #[derive(Clone, serde::Deserialize, serde::Serialize)]
 pub struct Material {
+    pub name: String,
     pub temp: f64,
     pub cte: f64,
     pub poissons: f64,
@@ -15,6 +19,7 @@ pub struct Material {
 impl Material {
     pub fn steel() -> Self {
         Material {
+            name: "Steel".to_owned(),
             temp: 20.0,
             cte: 11.5,
             poissons: 0.29,
@@ -26,6 +31,7 @@ impl Material {
 
     pub fn brass() -> Self {
         Material {
+            name: "Brass".to_owned(),
             temp: 20.0,
             cte: 19.5,
             poissons: 0.34,
@@ -47,51 +53,21 @@ impl Material {
     // }
 
     pub fn input(&mut self, ui: &mut Ui, id: &str) {
-        ui.add_space(5.0);
-
         let drag_width = 61.0;
 
+        // let phosphor_bronze = super::mat_data::pb104();
+
+        ui.add_space(5.0);
+
+        // Change this for a combobox to choose different materials?
+
+        ui.label(
+            egui::RichText::new(&self.name).italics().size(15.0), // .color(egui::Color32::from_rgb(39, 89, 129)),
+        );
+
+        ui.add_space(5.0);
+
         egui::Grid::new(id).striped(false).show(ui, |ui| {
-            ui.label("CTE");
-            ui.add_sized(
-                [drag_width, 18.0],
-                DragValue::new(&mut self.cte)
-                    .custom_formatter(|e, _| format!("{e:.1} ¹/k")) // /ºC")) ¹/k
-                    .custom_parser(|t| {
-                        let parsed = t
-                            .chars()
-                            .filter(|c| c.is_ascii_digit() || *c == '.' || *c == '-')
-                            .collect::<String>();
-                        parsed.parse::<f64>().ok()
-                    })
-                    .speed(0.1)
-                    .range(0.0..=f64::MAX)
-                    .min_decimals(1),
-            )
-            .on_hover_text("Thermal expansion coefficient");
-
-            ui.label("Temp");
-            ui.add_sized(
-                [drag_width, 18.0],
-                DragValue::new(&mut self.temp)
-                    .custom_formatter(|temp, _| {
-                        let precision = dynamic_precision(temp, 2);
-                        format!("{temp:.precision$} ºC")
-                    })
-                    .custom_parser(|temp| {
-                        let to_parse = temp
-                            .chars()
-                            .filter(|c| c.is_ascii_digit() || c == &'.' || c == &'-')
-                            .collect::<String>();
-                        to_parse.parse::<f64>().ok()
-                    })
-                    .speed(1.0)
-                    .range(-273.15..=10_000.0)
-                    .min_decimals(1),
-            )
-            .on_hover_text("Temperature");
-            ui.end_row();
-
             ui.label("Youngs");
             ui.add_sized(
                 [drag_width, 18.0],
@@ -172,6 +148,191 @@ impl Material {
             )
             .on_hover_text("Yield strength");
             ui.end_row();
+            ui.label("CTE");
+            ui.add_sized(
+                [drag_width, 18.0],
+                DragValue::new(&mut self.cte)
+                    .custom_formatter(|e, _| format!("{e:.1} ¹/k")) // /ºC")) ¹/k
+                    .custom_parser(|t| {
+                        let parsed = t
+                            .chars()
+                            .filter(|c| c.is_ascii_digit() || *c == '.' || *c == '-')
+                            .collect::<String>();
+                        parsed.parse::<f64>().ok()
+                    })
+                    .speed(0.1)
+                    .range(0.0..=f64::MAX)
+                    .min_decimals(1),
+            )
+            .on_hover_text("Thermal expansion coefficient");
+
+            // ui.label("Temp");
+            // ui.add_sized(
+            //     [drag_width, 18.0],
+            //     DragValue::new(&mut self.temp)
+            //         .custom_formatter(|temp, _| {
+            //             let precision = dynamic_precision(temp, 2);
+            //             format!("{temp:.precision$} ºC")
+            //         })
+            //         .custom_parser(|temp| {
+            //             let to_parse = temp
+            //                 .chars()
+            //                 .filter(|c| c.is_ascii_digit() || c == &'.' || c == &'-')
+            //                 .collect::<String>();
+            //             to_parse.parse::<f64>().ok()
+            //         })
+            //         .speed(1.0)
+            //         .range(-273.15..=10_000.0)
+            //         .min_decimals(1),
+            // )
+            // .on_hover_text("Temperature");
+            ui.end_row();
         });
     }
+}
+
+pub fn temperature_input(
+    ui: &mut Ui,
+    state: &mut State,
+    left_component: &mut Component,
+    right_component: &mut Component,
+) {
+    Frame::group(ui.style())
+        .inner_margin(10.0)
+        .rounding(10.0)
+        .show(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.set_width(514.0);
+                let button_size = [30.0, 18.0];
+                let drag_size = [54.5, 18.0];
+                let centre_spacing = 0.0; // Empirically determined (tweaked with drag now)
+                let temp_range = -273.15..=999.9;
+                let (mut left_changed, mut right_changed) = (false, false);
+
+                if ui
+                    .add_sized(button_size, Button::new("LN₂"))
+                    .on_hover_text("Liquid Nitrogen")
+                    .clicked()
+                {
+                    left_component.mat.temp = -196.0;
+                    left_changed = true;
+                }
+
+                if ui
+                    .add_sized(button_size, Button::new("RT"))
+                    .on_hover_text("Room temperature")
+                    .clicked()
+                {
+                    left_component.mat.temp = 20.0;
+                    left_changed = true;
+                }
+
+                left_changed |= ui
+                    .add(
+                        Slider::new(&mut left_component.mat.temp, temp_range.clone())
+                            .trailing_fill(true)
+                            .show_value(false)
+                            .handle_shape(egui::style::HandleShape::Rect {
+                                aspect_ratio: (0.2),
+                            }),
+                    )
+                    .on_hover_text("Hub temperature")
+                    .changed();
+
+                left_changed |= ui
+                    .add_sized(
+                        drag_size,
+                        DragValue::new(&mut left_component.mat.temp)
+                            .custom_formatter(|t, _| {
+                                let precision = dynamic_precision(t, 2);
+                                format!("{t:.precision$} ºC")
+                            })
+                            .custom_parser(|t| {
+                                let to_parse = t
+                                    .chars()
+                                    .filter(|c| c.is_ascii_digit() || c == &'.' || c == &'-')
+                                    .collect::<String>();
+                                to_parse.parse::<f64>().ok()
+                            })
+                            .speed(1.0)
+                            .range(temp_range.clone()),
+                    )
+                    .on_hover_text("Hub temperature")
+                    .changed();
+
+                ui.add_space(centre_spacing);
+
+                ui.toggle_value(&mut state.sync_temp, "🔃")
+                    .on_hover_text("Sync temperature");
+
+                ui.add_space(centre_spacing);
+
+                right_changed |= ui
+                    .add_sized(
+                        drag_size,
+                        DragValue::new(&mut right_component.mat.temp)
+                            .custom_formatter(|t, _| {
+                                let precision = dynamic_precision(t, 2);
+                                format!("{t:.precision$} ºC")
+                            })
+                            .custom_parser(|t| {
+                                let to_parse = t
+                                    .chars()
+                                    .filter(|c| c.is_ascii_digit() || c == &'.' || c == &'-')
+                                    .collect::<String>();
+                                to_parse.parse::<f64>().ok()
+                            })
+                            .speed(1.0)
+                            .range(temp_range.clone()),
+                    )
+                    .on_hover_text("Shaft temperature")
+                    .changed();
+
+                right_changed |= ui
+                    .add(
+                        Slider::new(&mut right_component.mat.temp, temp_range.clone())
+                            .trailing_fill(true)
+                            .show_value(false)
+                            .handle_shape(egui::style::HandleShape::Rect {
+                                aspect_ratio: (0.2),
+                            }),
+                    )
+                    .on_hover_text("Shaft temperature")
+                    .changed();
+
+                if ui
+                    .add_sized(button_size, Button::new("LN₂"))
+                    .on_hover_text("Liquid Nitrogen")
+                    .clicked()
+                {
+                    right_component.mat.temp = -196.0;
+                    right_changed = true;
+                }
+
+                if ui
+                    .add_sized(button_size, Button::new("RT"))
+                    .on_hover_text("Room temperature")
+                    .clicked()
+                {
+                    right_component.mat.temp = 20.0;
+                    right_changed = true;
+                }
+
+                // This method of syncing maintains the last changed feature hierachy
+                if left_changed {
+                    state.synced_temp = left_component.mat.temp;
+                } else if right_changed {
+                    state.synced_temp = right_component.mat.temp;
+                }
+
+                if state.sync_temp {
+                    left_component.mat.temp = state.synced_temp;
+                    right_component.mat.temp = state.synced_temp;
+                }
+
+                // For checking total width
+                // let width_text = ui.min_rect().width();
+                // ui.label(format!("{width_text}"));
+            })
+        });
 }

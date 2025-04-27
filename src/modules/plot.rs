@@ -8,7 +8,7 @@ use super::{
     component::Component,
     feature::Feature,
     geometry::{Circle, Path, Point, Rectangle, Segment, SineSegment},
-    utils::text_width,
+    utils::{text_width, State},
 };
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
@@ -25,17 +25,22 @@ pub struct Style {
     hatch_padding: f64,
 }
 
-pub fn side_by_side(ui: &mut Ui, left_component: &Component, right_component: &Component) {
+pub fn side_by_side(
+    ui: &mut Ui,
+    state: &State,
+    left_component: &Component,
+    right_component: &Component,
+) {
     let plot_name = "section_view";
 
     let (width, height) = (170.0, 45.0);
-    let (centre, left_centre) = (Point::new(0.0, 0.0), Point::new(-45.0, 0.0));
+    let (centre, left_centre) = (Point::new(0.0, 0.0), Point::new(-50.0, 0.0));
 
     let mut right_centre = left_centre;
     right_centre.mirror_in_y();
 
     let mut left_text = left_centre;
-    left_text.offset(-15.0, 15.0);
+    left_text.offset(-20.0, 20.0);
 
     let mut right_text = left_text;
     right_text.mirror_in_y();
@@ -46,31 +51,23 @@ pub fn side_by_side(ui: &mut Ui, left_component: &Component, right_component: &C
     } else {
         Color32::DARK_GRAY
     };
+    let text_colour = ui.visuals().text_color();
 
-    let scale = {
-        let mut denominator = 1.0f64;
-
-        for component in [left_component, right_component] {
-            // if component.outer_diameter.enabled {
-            //     denominator = denominator.max(component.outer_diameter.size);
-            // } else {
-            //     denominator = denominator.max(1.5 * component.inner_diameter.size);
-            // }
-            denominator = denominator.max(component.outer_diameter.size);
-        }
-
-        0.7 * height / denominator
-    };
+    let scale = 0.8 * height
+        / left_component
+            .outer_diameter
+            .size
+            .max(right_component.outer_diameter.size);
 
     let style = Style {
         scale,
         background_colour,
         line_width: 1.0,
         line_colour: outline_colour,
-        annotate_width: 1.5,
+        annotate_width: 1.2,
         annotate_colour: outline_colour,
         hatch_width: 0.5,
-        hatch_colour: outline_colour,
+        hatch_colour: text_colour,
         hatch_spacing: 2.5,
         hatch_padding: 0.5,
     };
@@ -95,7 +92,7 @@ pub fn side_by_side(ui: &mut Ui, left_component: &Component, right_component: &C
                 // .allow_scroll(false)
                 // .allow_boxed_zoom(false)
                 .show(ui, |ui| {
-                    set_plot_limits(ui, &style, false, width / 2.0, height / 2.0);
+                    set_plot_limits(ui, &style, state.debug, width / 1.8, height / 1.8);
 
                     end_view(ui, &style, left_component, left_centre, left_text, false);
 
@@ -504,8 +501,11 @@ pub fn diameter_limits(
     // Closure to draw text at a given position with the specified text.
     let mut draw_text = |pos: Point, text| {
         ui.text(
-            Text::new(pos.to_plotpoint(), RichText::new(text).size(13.0))
-                .anchor(Align2::LEFT_CENTER),
+            Text::new(
+                pos.to_plotpoint(),
+                RichText::new(text).size(13.0).color(style.annotate_colour),
+            )
+            .anchor(Align2::LEFT_CENTER),
         );
     };
 

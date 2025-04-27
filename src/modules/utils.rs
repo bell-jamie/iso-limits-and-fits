@@ -71,21 +71,41 @@ pub fn decimals(num: f64, decimals: i32) -> f64 {
     (num * factor).round() / factor
 }
 
+/// Computes dynamic level of precision based on value magnitude
+/// Used to keep a constant number of figures
 pub fn dynamic_precision(value: f64, max_decimals: isize) -> usize {
-    // Handle NaN, infinite, and zero values
     if value.is_nan() || value.is_infinite() {
         return 0; //
     }
 
-    // Handle zero
     let magnitude = if value <= 1.0 && value >= -1.0 {
         0 // Default magnitude for zero
     } else {
         value.abs().log10().floor() as isize
     };
 
-    // Calculate precision dynamically
     (max_decimals - magnitude).max(0) as usize
+}
+
+/// Returns the number of decimal places required to fully display `value` precisely.
+/// Takes 'decimals' argument to limit required precision
+pub fn req_precision(value: f64, decimals: isize) -> usize {
+    if value == 0.0 || value.is_nan() || value.is_infinite() {
+        return 0;
+    }
+
+    // Format with limited precision
+    let limit = if decimals >= 0 { decimals as usize } else { 4 };
+    let s = format!("{:.limit$}", value.abs());
+
+    // Find decimal point
+    if let Some(pos) = s.find('.') {
+        // Trim trailing zeros after decimal point
+        let decimals = &s[pos + 1..];
+        decimals.trim_end_matches('0').len()
+    } else {
+        0
+    }
 }
 
 pub fn text_width(ctx: &Context, text: &str) -> Vec2 {
@@ -100,12 +120,12 @@ pub fn text_width(ctx: &Context, text: &str) -> Vec2 {
     .size()
 }
 
-/// This function is framerate dependant...
-pub fn lerp_untimed(current: f64, target: f64, rate: f64, tol: f64) -> f64 {
+/// This function is framerate dependant.
+pub fn lerp_untimed(current: f64, target: f64, rate: f64, tol: f64) -> Option<f64> {
     if (current - target).abs() > tol {
-        current + rate * (target - current)
+        Some(current + rate * (target - current))
     } else {
-        target
+        None
     }
 }
 

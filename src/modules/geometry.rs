@@ -399,52 +399,52 @@ impl Path {
     /// map to the indices of the new shorter edges. These are pushed to the next vec for checking.
     /// This is recursive, dropping the vec each time, until the edge length is below a threshold.
     /// Then the edge centre is chosen.
-    pub fn fast_intersections(&self, segment: Segment, closed: bool) -> Vec<Vec<Point>> {
-        let mut threshold = 10.0;
-        let mut mask = 0u32;
-        let floor = 1e-3;
+    // pub fn fast_intersections(&self, segment: Segment, closed: bool) -> Vec<Vec<Point>> {
+    //     let mut threshold = 10.0;
+    //     let mut mask = 0u32;
+    //     let floor = 1e-3;
 
-        let mut result = Vec::new(); // temp!!
+    //     let mut result = Vec::new(); // temp!!
 
-        while threshold > floor {
-            let mut i = 1;
-            let mut points_temp = self
-                .points
-                .clone()
-                .into_iter()
-                .enumerate()
-                .filter(|(idx, _)| (mask >> idx) & 1 == 0)
-                .map(|(_, val)| val)
-                .collect::<Vec<_>>();
+    //     while threshold > floor {
+    //         let mut i = 1;
+    //         let mut points_temp = self
+    //             .points
+    //             .clone()
+    //             .into_iter()
+    //             .enumerate()
+    //             .filter(|(idx, _)| (mask >> idx) & 1 == 0)
+    //             .map(|(_, val)| val)
+    //             .collect::<Vec<_>>();
 
-            while i < points_temp.len() {
-                let (p1, p2) = (points_temp[i - 1], points_temp[i]);
+    //         while i < points_temp.len() {
+    //             let (p1, p2) = (points_temp[i - 1], points_temp[i]);
 
-                if p1.distance(p2) < threshold {
-                    i += 1;
-                } else {
-                    points_temp.remove(i);
-                }
-            }
+    //             if p1.distance(p2) < threshold {
+    //                 i += 1;
+    //             } else {
+    //                 points_temp.remove(i);
+    //             }
+    //         }
 
-            let path_temp = Path {
-                points: points_temp,
-            };
-            result.push(path_temp.segments(closed).into_iter().fold(
-                Vec::new(),
-                |mut vec, edge| {
-                    if let Some(intersection) = edge.intersect(segment) {
-                        vec.push(intersection);
-                    }
-                    vec
-                },
-            ));
+    //         let path_temp = Path {
+    //             points: points_temp,
+    //         };
+    //         result.push(path_temp.segments(closed).into_iter().fold(
+    //             Vec::new(),
+    //             |mut vec, edge| {
+    //                 if let Some(intersection) = edge.intersect(segment) {
+    //                     vec.push(intersection);
+    //                 }
+    //                 vec
+    //             },
+    //         ));
 
-            threshold /= 10.0;
-        }
+    //         threshold /= 10.0;
+    //     }
 
-        result
-    }
+    //     result
+    // }
 
     pub fn to_line(&self) -> Line {
         Line::new(PlotPoints::from_iter(

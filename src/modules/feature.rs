@@ -3,7 +3,7 @@ use egui::{ComboBox, DragValue, Grid, SelectableLabel, Ui};
 use super::{
     material::Material,
     tolerance::{GradesDeviations, Iso, Tolerance},
-    utils::{decimals, State},
+    utils::{decimals, req_precision, State},
 };
 
 // #[derive(Clone, serde::Deserialize, serde::Serialize)]
@@ -297,6 +297,14 @@ impl Feature {
 
         ui.add_space(5.0);
 
+        let upper_trunc = decimals(self.upper_limit(mat), -1);
+        let middle_trunc = decimals(self.middle_limit(mat), -1);
+        let lower_trunc = decimals(self.lower_limit(mat), -1);
+
+        let precision = (req_precision(upper_trunc, -1))
+            .max(req_precision(middle_trunc, -1))
+            .max(req_precision(lower_trunc, -1));
+
         Grid::new(id)
             .striped(false)
             .min_col_width(10.0)
@@ -304,7 +312,7 @@ impl Feature {
                 ui.label("⬆")
                     .on_hover_cursor(egui::CursorIcon::Default)
                     .on_hover_text("Upper limit");
-                ui.label(format!("{:.}", decimals(self.upper_limit(mat), -1)));
+                ui.label(format!("{:.precision$}", upper_trunc));
                 ui.label("mm");
                 if mat.is_none() {
                     ui.label(format!(
@@ -324,7 +332,7 @@ impl Feature {
                 ui.label("⬍")
                     .on_hover_cursor(egui::CursorIcon::Default)
                     .on_hover_text("Mid-limits");
-                ui.label(format!("{:.}", decimals(self.middle_limit(mat), -1)));
+                ui.label(format!("{:.precision$}", middle_trunc));
                 ui.label("mm");
                 if mat.is_none() {
                     ui.label(format!("±{:.}", decimals(scale * self.tolerance.mid(), -1)));
@@ -335,7 +343,7 @@ impl Feature {
                 ui.label("⬇")
                     .on_hover_cursor(egui::CursorIcon::Default)
                     .on_hover_text("Lower limit");
-                ui.label(format!("{:.}", decimals(self.lower_limit(mat), -1)));
+                ui.label(format!("{:.precision$}", lower_trunc));
                 ui.label("mm");
                 if mat.is_none() {
                     ui.label(format!(

@@ -4,6 +4,7 @@ pub mod fit;
 pub mod geometry;
 pub mod interference;
 pub mod lookup;
+pub mod mat_data;
 pub mod material;
 pub mod plot;
 pub mod tolerance;

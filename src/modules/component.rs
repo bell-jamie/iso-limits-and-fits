@@ -139,16 +139,18 @@ impl Component {
 
                     // Automatic (smooth) scaling based on enabled feature
                     if !self.outer_diameter.enabled {
-                        let target = (1.5 * self.inner_diameter.size).max(1.0);
-                        let rate = 0.1;
-                        let tolerance = (0.005 * self.inner_diameter.size).max(0.01);
+                        let target = (1.8 * self.inner_diameter.size).max(1.0);
 
-                        let temp = self.outer_diameter.size;
+                        if self.outer_diameter.size != target {
+                            let rate = 0.1;
+                            let tolerance = (0.005 * self.inner_diameter.size).max(0.01);
 
-                        self.outer_diameter.size =
-                            lerp_untimed(self.outer_diameter.size, target, rate, tolerance);
-                        if self.outer_diameter.size != temp {
-                            ui.ctx().request_repaint();
+                            if let Some(size) =
+                                lerp_untimed(self.outer_diameter.size, target, rate, tolerance)
+                            {
+                                self.outer_diameter.size = size;
+                                ui.ctx().request_repaint();
+                            }
                         }
                     }
                 });

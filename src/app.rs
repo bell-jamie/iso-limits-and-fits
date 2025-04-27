@@ -1,4 +1,6 @@
-use crate::modules::{component::Component, fit::Fit, plot, utils::State};
+use crate::modules::{
+    component::Component, fit::Fit, material::temperature_input, plot, utils::State,
+};
 use egui::{Button, Color32, CursorIcon, RichText};
 
 #[derive(serde::Deserialize, serde::Serialize)]
@@ -105,12 +107,17 @@ impl eframe::App for LimitsFitsApp {
 
                 ui.add_space(10.0);
 
-                plot::side_by_side(ui, &self.hub, &self.shaft);
+                temperature_input(ui, &mut self.state, &mut self.hub, &mut self.shaft);
 
                 ui.add_space(10.0);
 
-                let fit = Fit::new(&self.hub, &self.shaft);
-                fit.show(ui, &self.state);
+                plot::side_by_side(ui, &self.state, &self.hub, &self.shaft);
+
+                ui.add_space(10.0);
+
+                let mut fit = Fit::new(&self.hub, &self.shaft);
+
+                fit.show_advanced(ui, &self.state);
             } else {
                 // Simple mode
                 self.hub.show(ui, &mut self.state);
