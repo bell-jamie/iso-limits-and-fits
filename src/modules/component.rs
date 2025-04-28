@@ -42,6 +42,15 @@ impl Component {
         }
     }
 
+    /// Not thrilled with this clone()
+    pub fn primary_feature(&self) -> Feature {
+        if self.inner_diameter.primary {
+            self.inner_diameter.clone()
+        } else {
+            self.outer_diameter.clone()
+        }
+    }
+
     pub fn show(&mut self, ui: &mut Ui, state: &mut State) {
         Frame::group(ui.style())
             .inner_margin(10.0)

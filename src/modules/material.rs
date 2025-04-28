@@ -1,7 +1,8 @@
-use egui::{Button, DragValue, Frame, Slider, Ui};
+use egui::{emath::vec2, Button, Color32, DragValue, Frame, Slider, Ui};
 
 use super::{
     component::Component,
+    plot,
     utils::{dynamic_precision, State},
 };
 
@@ -61,8 +62,10 @@ impl Material {
 
         // Change this for a combobox to choose different materials?
 
-        ui.label(
-            egui::RichText::new(&self.name).italics().size(15.0), // .color(egui::Color32::from_rgb(39, 89, 129)),
+        ui.add(
+            egui::TextEdit::singleline(&mut self.name)
+                .desired_width(ui.min_rect().width() - ui.style().spacing.item_spacing.x)
+                .background_color(ui.visuals().widgets.inactive.bg_fill),
         );
 
         ui.add_space(5.0);
@@ -333,6 +336,20 @@ pub fn temperature_input(
                 // For checking total width
                 // let width_text = ui.min_rect().width();
                 // ui.label(format!("{width_text}"));
+            })
+        });
+}
+
+pub fn temperature_output(ui: &mut Ui, state: &mut State, hub: &Component, shaft: &Component) {
+    Frame::group(ui.style())
+        .inner_margin(10.0)
+        .rounding(10.0)
+        .show(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.set_max_size(vec2(514.0, 200.0));
+
+                ui.label("WIP Temp Graph");
+                plot::fit_temp_graph(ui, state, hub, shaft);
             })
         });
 }

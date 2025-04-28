@@ -118,7 +118,118 @@ pub fn side_by_side(
         });
 }
 
-pub fn set_plot_limits(ui: &mut PlotUi, style: &Style, visible: bool, x: f64, y: f64) {
+pub fn fit_temp_graph(ui: &mut Ui, state: &State, hub: &Component, shaft: &Component) {
+    let material_at_temp = |component: &Component, temp: f64| {
+        let mut material = component.mat.clone();
+        material.temp = temp;
+        material
+    };
+
+    let plot_name = "temp_graph";
+
+    let outline_colour = if ui.visuals().dark_mode {
+        Color32::LIGHT_GRAY
+    } else {
+        Color32::DARK_GRAY
+    };
+
+    let (width, height) = (170.0, 45.0);
+
+    let hub_temp = hub.mat.temp;
+    let shaft_temp = shaft.mat.temp;
+    let max_temp = 1.5 * hub_temp.max(shaft_temp);
+
+    // Not the best limits tbh, doesn't really account for negative expansions or interference
+    let y_max = hub.inner_diameter.upper_limit(Some(&hub.mat));
+    let y_min = shaft.outer_diameter.lower_limit(None);
+
+    let hub_temp_path = Path {
+        points: vec![Point::new(hub_temp, y_min), Point::new(hub_temp, y_max)],
+    };
+    let shaft_temp_path = Path {
+        points: vec![Point::new(shaft_temp, y_min), Point::new(shaft_temp, y_max)],
+    };
+
+    let temp_min = hub.mat.temp.min(shaft.mat.temp);
+    let temp_max = hub.mat.temp.max(shaft.mat.temp);
+    let (t0, t1) = (temp_min - 20.0, temp_max + 20.0);
+
+    Plot::new(&plot_name)
+        .show_grid(false)
+        .show_background(false)
+        .show(ui, |ui| {
+            // ui.line(
+            //     hub_temp_path
+            //         .to_line()
+            //         .color(outline_colour)
+            //         .style(LineStyle::dotted_loose()),
+            // );
+            // ui.line(
+            //     shaft_temp_path
+            //         .to_line()
+            //         .color(outline_colour)
+            //         .style(LineStyle::dotted_loose()),
+            // );
+
+            for (component, colour) in &[(hub, Color32::RED), (shaft, Color32::BLUE)] {
+                let mat_t0 = material_at_temp(component, t0);
+                let mat_t1 = material_at_temp(component, t1);
+
+                let (t0_upr, t0_mid, t0_lwr) = (
+                    component.primary_feature().upper_limit(Some(&mat_t0)),
+                    component.primary_feature().middle_limit(Some(&mat_t0)),
+                    component.primary_feature().lower_limit(Some(&mat_t0)),
+                );
+
+                let (t1_upr, t1_mid, t1_lwr) = (
+                    component.primary_feature().upper_limit(Some(&mat_t1)),
+                    component.primary_feature().middle_limit(Some(&mat_t1)),
+                    component.primary_feature().lower_limit(Some(&mat_t1)),
+                );
+
+                let (p0_upr, p1_upr, p0_mid, p1_mid, p0_lwr, p1_lwr) = (
+                    Point::new(t0, t0_upr),
+                    Point::new(t1, t1_upr),
+                    Point::new(t1, t1_mid),
+                    Point::new(t0, t0_mid),
+                    Point::new(t0, t0_lwr),
+                    Point::new(t1, t1_lwr),
+                );
+
+                let path_nominal = Path {
+                    points: vec![p0_mid, p1_mid],
+                };
+                let path_full = Path {
+                    points: vec![p0_upr, p1_upr, p1_lwr, p0_lwr],
+                };
+
+                ui.polygon(
+                    path_full
+                        .to_poly()
+                        .stroke(Stroke {
+                            width: 0.0,
+                            color: Color32::TRANSPARENT,
+                        })
+                        .fill_color(colour.gamma_multiply(0.1)),
+                );
+                ui.line(path_nominal.to_line().color(outline_colour));
+                ui.line(
+                    path_full.segments(false)[0]
+                        .to_line()
+                        .color(outline_colour)
+                        .style(LineStyle::dashed_loose()),
+                );
+                ui.line(
+                    path_full.segments(false)[2]
+                        .to_line()
+                        .color(outline_colour)
+                        .style(LineStyle::dashed_loose()),
+                );
+            }
+        });
+}
+
+fn set_plot_limits(ui: &mut PlotUi, style: &Style, visible: bool, x: f64, y: f64) {
     if visible {
         let (dx, dy) = (x / 10.0, y / 10.0);
         let mut marker = Path {
@@ -153,7 +264,7 @@ pub fn set_plot_limits(ui: &mut PlotUi, style: &Style, visible: bool, x: f64, y:
     }
 }
 
-pub fn end_view(
+fn end_view(
     ui: &mut PlotUi,
     style: &Style,
     component: &Component,
@@ -241,7 +352,7 @@ pub fn end_view(
     plot_centre_mark(ui, style, centre, style.scale * centre_size, 0.0);
 }
 
-pub fn centre_view(
+fn centre_view(
     ui: &mut PlotUi,
     style: &Style,
     left_component: &Component,
@@ -357,7 +468,7 @@ pub fn centre_view(
     plot_centreline(ui, style, centre, right, 0.0);
 }
 
-pub fn hatched_section(
+fn hatched_section(
     ui: &mut PlotUi,
     style: &Style,
     mut angle: f64,
@@ -444,7 +555,7 @@ pub fn hatched_section(
     }
 }
 
-pub fn diameter_limits(
+fn diameter_limits(
     ui: &mut PlotUi,
     style: &Style,
     centre: Point,
@@ -531,7 +642,7 @@ fn arrow_head(colour: Color32, centre: Point, angle: f64) -> Polygon {
     })
 }
 
-pub fn plot_centre_mark(ui: &mut PlotUi, style: &Style, centre: Point, size: f64, angle: f64) {
+fn plot_centre_mark(ui: &mut PlotUi, style: &Style, centre: Point, size: f64, angle: f64) {
     let line = Stroke {
         width: style.line_width,
         color: style.line_colour,
@@ -589,7 +700,7 @@ pub fn plot_centre_mark(ui: &mut PlotUi, style: &Style, centre: Point, size: f64
     }
 }
 
-pub fn plot_centreline(ui: &mut PlotUi, style: &Style, centre: Point, size: f64, angle: f64) {
+fn plot_centreline(ui: &mut PlotUi, style: &Style, centre: Point, size: f64, angle: f64) {
     let line = Stroke {
         width: style.line_width,
         color: style.line_colour,
@@ -631,7 +742,7 @@ pub fn plot_centreline(ui: &mut PlotUi, style: &Style, centre: Point, size: f64,
     }
 }
 
-pub fn plot_diameter_symbol(ui: &mut PlotUi, line: Stroke, centre: Point) {
+fn plot_diameter_symbol(ui: &mut PlotUi, line: Stroke, centre: Point) {
     let diameter = 3.0;
     let bar_length = 5.5;
     let mut bar = Path {
@@ -651,7 +762,7 @@ pub fn plot_diameter_symbol(ui: &mut PlotUi, line: Stroke, centre: Point) {
     ui.line(bar.to_line().stroke(line));
 }
 
-pub fn plot_arrow_leader(ui: &mut PlotUi, line: Stroke, mut tip: Point, knee: Point, end: Point) {
+fn plot_arrow_leader(ui: &mut PlotUi, line: Stroke, mut tip: Point, knee: Point, end: Point) {
     let angle = (knee.y - tip.y).atan2(knee.x - tip.x) * (180.0 / std::f64::consts::PI);
     ui.polygon(arrow_head(line.color, tip, angle));
     tip.vector_offset(angle, 0.5); // This is to stop the square line blunting the arrow tip
