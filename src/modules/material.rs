@@ -1,9 +1,10 @@
-use egui::{emath::vec2, Button, Color32, DragValue, Frame, Slider, Ui};
+use egui::{emath::vec2, Button, Color32, DragValue, Frame, Modal, Slider, Ui};
+use std::{cmp::Ordering, collections::BTreeSet};
 
 use super::{
     component::Component,
     plot,
-    utils::{dynamic_precision, State},
+    utils::{self, dynamic_precision, State},
 };
 
 #[derive(Clone, serde::Deserialize, serde::Serialize)]
@@ -17,28 +18,50 @@ pub struct Material {
     pub uts: f64,
 }
 
+/// This is all required to use the BTreeSet to store materials
+/// Only sorts based on the name String for now
+impl PartialOrd for Material {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        self.name.partial_cmp(&other.name)
+    }
+}
+
+impl Ord for Material {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.name.cmp(&other.name)
+    }
+}
+
+impl PartialEq for Material {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name
+    }
+}
+
+impl Eq for Material {}
+
 impl Material {
-    pub fn steel() -> Self {
+    pub fn steel4340() -> Self {
         Material {
-            name: "Steel".to_owned(),
+            name: "4340 Steel - Annealed".to_owned(),
             temp: 20.0,
-            cte: 11.5,
-            poissons: 0.29,
-            youngs: 200_000.0,
-            ys: 300.0,
-            uts: 500.0,
+            cte: 12.3,
+            poissons: 0.30,
+            youngs: 129_000.0,
+            ys: 470.0,
+            uts: 745.0,
         }
     }
 
-    pub fn brass() -> Self {
+    pub fn pb104() -> Self {
         Material {
-            name: "Brass".to_owned(),
+            name: "Phosphor Bronze — PB104".to_owned(),
             temp: 20.0,
-            cte: 19.5,
+            cte: 17.0,
             poissons: 0.34,
-            youngs: 110_000.0,
-            ys: 300.0,
-            uts: 450.0,
+            youngs: 105_000.0,
+            ys: 360.0,
+            uts: 500.0,
         }
     }
 
@@ -53,22 +76,95 @@ impl Material {
     //     }
     // }
 
-    pub fn input(&mut self, ui: &mut Ui, id: &str) {
+    pub fn input(&mut self, ui: &mut Ui, materials: &mut BTreeSet<Material>, id: &str) {
         let drag_width = 61.0;
-
-        // let phosphor_bronze = super::mat_data::pb104();
+        let id = ui.make_persistent_id(format!("{id}-material_listing"));
 
         ui.add_space(5.0);
 
-        // Change this for a combobox to choose different materials?
+        // Calculate input width
+        let material_name_input_width =
+            ui.min_rect().width() - 2.0 * ui.style().spacing.item_spacing.x - 21.0;
 
-        ui.add(
-            egui::TextEdit::singleline(&mut self.name)
-                .desired_width(ui.min_rect().width() - ui.style().spacing.item_spacing.x)
-                .background_color(ui.visuals().widgets.inactive.bg_fill),
+        let material_name_input = egui::TextEdit::singleline(&mut self.name)
+            .desired_width(material_name_input_width)
+            .background_color(ui.visuals().widgets.inactive.bg_fill);
+
+        let material_save_button = Button::new("💾");
+
+        // Create input field and save button
+        let (save_button, name_input) = ui
+            .horizontal(|ui| (ui.add(material_save_button), ui.add(material_name_input)))
+            .inner;
+
+        ui.add_space(5.0);
+
+        if save_button.clicked() {
+            // let error_message = Modal::new(egui::Id::new("material_exists")).show(|ui| {
+            //     ui.vertical_centered(|ui| {
+            //         ui.heading("Error");
+            //         ui.label("This material already exists.");
+            //         if ui.button("OK").clicked() {
+            //             modal.close();
+            //         }
+            //     })
+            // });
+            // if materials.contains(self) {
+
+            // } else {
+            //     materials.insert(self.clone());
+            // }
+
+            materials.insert(self.clone());
+        }
+
+        // Open popup when the name input is focused
+        if name_input.has_focus() && !ui.memory(|mem| mem.is_popup_open(id)) {
+            ui.memory_mut(|mem| mem.open_popup(id));
+        }
+
+        egui::popup::popup_below_widget(
+            ui,
+            id,
+            &name_input,
+            egui::containers::popup::PopupCloseBehavior::CloseOnClickOutside,
+            |ui| {
+                egui::ScrollArea::vertical()
+                    .min_scrolled_height(100.0)
+                    .show(ui, |ui| {
+                        // ui.set_min_height(60.0);
+                        let mut to_remove = None;
+
+                        for material in materials.iter() {
+                            let (delete_button, material_listing) = ui
+                                .horizontal(|ui| {
+                                    (
+                                        ui.add(Button::new("🗑")),
+                                        ui.add(
+                                            // [material_name_input_width, 18.0],
+                                            Button::new(material.name.clone()),
+                                        ),
+                                    )
+                                })
+                                .inner;
+
+                            if material_listing.clicked() {
+                                *self = material.clone();
+                                ui.memory_mut(|mem| mem.close_popup()); // close when selected
+                            }
+
+                            if delete_button.clicked() {
+                                to_remove = Some(material.clone());
+                            }
+                        }
+
+                        // Material has to be deleted outside iter method
+                        if let Some(material) = to_remove {
+                            materials.remove(&material);
+                        }
+                    })
+            },
         );
-
-        ui.add_space(5.0);
 
         egui::Grid::new(id).striped(false).show(ui, |ui| {
             ui.label("Youngs");

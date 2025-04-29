@@ -129,11 +129,11 @@ pub fn lerp_untimed(current: f64, target: f64, rate: f64, tol: f64) -> Option<f6
     }
 }
 
-// pub fn check_width(ui: &mut Ui) {
-//     let width = ui.min_rect().width();
-//     ui.label(RichText::new(format!("{width} pixels")).strong())
-//         .on_hover_text(format!("{width}"));
-// }
+pub fn check_width(ui: &mut Ui) {
+    let width = ui.min_rect().width();
+    ui.label(RichText::new(format!("{width} pixels")).strong())
+        .on_hover_text(format!("{width}"));
+}
 
 // pub fn linspace(a: f64, b: f64, n: usize) -> Vec<f64> {
 //     (0..n)

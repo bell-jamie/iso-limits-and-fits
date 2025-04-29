@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use super::{
     feature::Feature,
     material::Material,
@@ -27,7 +29,7 @@ impl Component {
             name: "Hub".to_owned(),
             inner_diameter: Feature::default_hole(),
             outer_diameter: Feature::default_outer(),
-            mat: Material::brass(),
+            mat: Material::pb104(),
             focus: Focus::Inner,
         }
     }
@@ -37,7 +39,7 @@ impl Component {
             name: "Shaft".to_owned(),
             inner_diameter: Feature::default_inner(),
             outer_diameter: Feature::default_shaft(),
-            mat: Material::steel(),
+            mat: Material::steel4340(),
             focus: Focus::Outer,
         }
     }
@@ -51,7 +53,7 @@ impl Component {
         }
     }
 
-    pub fn show(&mut self, ui: &mut Ui, state: &mut State) {
+    pub fn show(&mut self, ui: &mut Ui, state: &mut State, materials: &mut BTreeSet<Material>) {
         Frame::group(ui.style())
             .inner_margin(10.0)
             .rounding(10.0)
@@ -135,7 +137,7 @@ impl Component {
                             self.outer_diameter
                                 .show(ui, state, &self.name, &self.inner_diameter)
                         }
-                        Focus::Material => self.mat.input(ui, &self.name),
+                        Focus::Material => self.mat.input(ui, materials, &self.name),
                     }
 
                     if state.sync_size {

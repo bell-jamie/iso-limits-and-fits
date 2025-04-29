@@ -1,5 +1,9 @@
-use crate::modules::{component::Component, fit::Fit, material, plot, utils::State};
+use crate::modules::{
+    component::Component, fit::Fit, mat_data::material_list, material, material::Material, plot,
+    utils::State,
+};
 use egui::{Button, Color32, CursorIcon, RichText};
+use std::collections::BTreeSet;
 
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)]
@@ -7,6 +11,7 @@ pub struct LimitsFitsApp {
     hub: Component,
     shaft: Component,
     state: State,
+    materials: BTreeSet<Material>,
 }
 
 impl Default for LimitsFitsApp {
@@ -15,6 +20,7 @@ impl Default for LimitsFitsApp {
             hub: Component::default_hub(),
             shaft: Component::default_shaft(),
             state: State::default(),
+            materials: material_list(),
         }
     }
 }
@@ -65,6 +71,7 @@ impl eframe::App for LimitsFitsApp {
                     self.hub = Component::default_hub();
                     self.shaft = Component::default_shaft();
                     self.state = State::default();
+                    self.materials = material_list();
                 }
 
                 if self.state.debug {
@@ -96,11 +103,11 @@ impl eframe::App for LimitsFitsApp {
 
             if self.state.advanced {
                 ui.horizontal(|ui| {
-                    self.hub.show(ui, &mut self.state);
+                    self.hub.show(ui, &mut self.state, &mut self.materials);
 
                     ui.add_space(10.0);
 
-                    self.shaft.show(ui, &mut self.state);
+                    self.shaft.show(ui, &mut self.state, &mut self.materials);
                 });
 
                 ui.add_space(10.0);
@@ -122,11 +129,11 @@ impl eframe::App for LimitsFitsApp {
                 fit.show_advanced(ui, &self.state);
             } else {
                 // Simple mode
-                self.hub.show(ui, &mut self.state);
+                self.hub.show(ui, &mut self.state, &mut self.materials);
 
                 ui.add_space(10.0);
 
-                self.shaft.show(ui, &mut self.state);
+                self.shaft.show(ui, &mut self.state, &mut self.materials);
 
                 ui.add_space(10.0);
 
@@ -139,12 +146,6 @@ impl eframe::App for LimitsFitsApp {
                 egui::warn_if_debug_build(ui);
             });
         });
-
-        // if self.test_visual.display {
-        //     egui::SidePanel::right("right_panel").show(ctx, |ui| {
-        //         self.test_visual.show(ui, &self.fit, "test_visual");
-        //     });
-        // }
     }
 }
 
