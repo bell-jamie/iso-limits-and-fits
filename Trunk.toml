@@ -1,1 +1,11 @@
 [build]
+wasm = false
+#no_sri = true - doesn't work
+
+[serve]
+port = 8080
+#open = true - opens a new tab whenever serve is called
+
+[reload]
+#inject_ws = true
+#hard_refresh = true

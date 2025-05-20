@@ -112,21 +112,15 @@ impl eframe::App for LimitsFitsApp {
 
                 ui.add_space(10.0);
 
-                material::temperature_input(ui, &mut self.state, &mut self.hub, &mut self.shaft);
-
-                ui.add_space(10.0);
-
                 plot::side_by_side(ui, &self.state, &self.hub, &self.shaft);
 
                 ui.add_space(10.0);
 
-                material::temperature_output(ui, &mut self.state, &self.hub, &self.shaft);
+                material::temperature_input(ui, &mut self.state, &mut self.hub, &mut self.shaft);
 
                 ui.add_space(10.0);
 
-                let mut fit = Fit::new(&self.hub, &self.shaft);
-
-                fit.show_advanced(ui, &self.state);
+                material::temperature_output(ui, &mut self.state, &self.hub, &self.shaft);
             } else {
                 // Simple mode
                 self.hub.show(ui, &mut self.state, &mut self.materials);

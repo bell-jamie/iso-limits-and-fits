@@ -3,6 +3,7 @@ use std::{cmp::Ordering, collections::BTreeSet};
 
 use super::{
     component::Component,
+    fit::Fit,
     plot,
     utils::{self, dynamic_precision, State},
 };
@@ -444,7 +445,11 @@ pub fn temperature_output(ui: &mut Ui, state: &mut State, hub: &Component, shaft
             ui.horizontal(|ui| {
                 ui.set_max_size(vec2(514.0, 200.0));
 
-                ui.label("WIP Temp Graph");
+                ui.vertical(|ui| {
+                    let fit = Fit::new(&hub, &shaft);
+                    fit.show_advanced(ui, state);
+                });
+
                 plot::fit_temp_graph(ui, state, hub, shaft);
             })
         });

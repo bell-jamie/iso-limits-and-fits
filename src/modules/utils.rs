@@ -49,18 +49,37 @@ impl Zoom {
         ui.toggle_value(&mut self.expand, "🔍")
             .on_hover_text("Zoom");
 
+        let (min_zoom, max_zoom) = (0.5, 3.0);
+
+        // Handles the ui zoom slider
         if self.expand {
             ui.label(format!("{:.1}x", self.scale));
 
-            if !ui
-                .add(egui::Slider::new(&mut self.scale, 0.5..=3.0).show_value(false))
+            if ui
+                .add(egui::Slider::new(&mut self.scale, min_zoom..=max_zoom).show_value(false))
                 .is_pointer_button_down_on()
             {
-                ctx.set_zoom_factor(self.scale);
+                return;
             }
-        } else {
-            ctx.set_zoom_factor(self.scale);
         }
+
+        // Handles the scroll and keyboard inputs - disabled for now
+        // ctx.input(|i| {
+        //     if i.modifiers.command {
+        //         if i.raw_scroll_delta.y != 0.0 {
+        //             self.scale += i.raw_scroll_delta.y * 1e-3;
+        //         }
+
+        //         if i.key_pressed(egui::Key::Plus) {
+        //             self.scale += 0.1;
+        //         } else if i.key_pressed(egui::Key::Minus) {
+        //             self.scale -= 0.1;
+        //         }
+        //     }
+        // });
+
+        self.scale = self.scale.clamp(min_zoom, max_zoom);
+        ctx.set_zoom_factor(self.scale);
     }
 }
 
@@ -108,12 +127,16 @@ pub fn req_precision(value: f64, decimals: isize) -> usize {
     }
 }
 
-pub fn text_width(ctx: &Context, text: &str) -> Vec2 {
+pub fn text_width(ctx: &Context, text: &str, size: f32) -> Vec2 {
     // Returns the x and y size of the text
     ctx.fonts(|f| {
         f.layout_no_wrap(
             text.to_string(),
-            egui::FontId::default(),
+            {
+                let mut default = egui::FontId::default();
+                default.size = size;
+                default
+            },
             egui::Color32::WHITE,
         )
     })

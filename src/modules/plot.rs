@@ -8,7 +8,7 @@ use super::{
     component::Component,
     feature::Feature,
     geometry::{Circle, Path, Point, Rectangle, Segment, SineSegment},
-    utils::{text_width, State},
+    utils::{dynamic_precision, text_width, State},
 };
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
@@ -28,22 +28,22 @@ pub struct Style {
 pub fn side_by_side(
     ui: &mut Ui,
     state: &State,
-    left_component: &Component,
-    right_component: &Component,
+    lh_component: &Component,
+    rh_component: &Component,
 ) {
     let plot_name = "section_view";
 
     let (width, height) = (170.0, 45.0);
-    let (centre, left_centre) = (Point::new(0.0, 0.0), Point::new(-50.0, 0.0));
+    let (centre, lh_centre) = (Point::new(0.0, 0.0), Point::new(-50.0, 0.0));
 
-    let mut right_centre = left_centre;
-    right_centre.mirror_in_y();
+    let mut rh_centre = lh_centre;
+    rh_centre.mirror_in_y();
 
-    let mut left_text = left_centre;
-    left_text.offset(-20.0, 20.0);
+    let mut lh_text = lh_centre;
+    lh_text.offset(-20.0, 20.0);
 
-    let mut right_text = left_text;
-    right_text.mirror_in_y();
+    let mut rh_text = lh_text;
+    rh_text.mirror_in_y();
 
     let background_colour = ui.visuals().window_fill;
     let outline_colour = if ui.visuals().dark_mode {
@@ -54,10 +54,10 @@ pub fn side_by_side(
     let text_colour = ui.visuals().text_color();
 
     let scale = 0.8 * height
-        / left_component
+        / lh_component
             .outer_diameter
             .size
-            .max(right_component.outer_diameter.size);
+            .max(rh_component.outer_diameter.size);
 
     let style = Style {
         scale,
@@ -87,33 +87,12 @@ pub fn side_by_side(
                 .show_background(false)
                 .show_x(false)
                 .show_y(false)
-                // .allow_drag(false)
-                // .allow_zoom(false)
-                // .allow_scroll(false)
-                // .allow_boxed_zoom(false)
                 .show(ui, |ui| {
+                    let zoom = calculate_plot_zoom(&ui) / 2.5; // magic number oopsies
                     set_plot_limits(ui, &style, state.debug, width / 1.8, height / 1.8);
-
-                    end_view(ui, &style, left_component, left_centre, left_text, false);
-
-                    centre_view(ui, &style, left_component, right_component, centre);
-
-                    end_view(ui, &style, right_component, right_centre, right_text, true);
-
-                    // let p1 = Point::new(-50.0, 20.0);
-                    // let p2 = Point::new(30.0, -10.0);
-                    // let p3 = Point::new(5.0, -5.0);
-
-                    // let test = SineSegment::new(p1, p2, 10.0, 2.0);
-                    // let seg = Segment::new(p1, p2);
-                    // ui.line(test.to_path().to_line());
-                    // ui.line(seg.to_line());
-
-                    // let intersections = test.to_path().fast_intersections(seg, false);
-
-                    // for int in intersections.into_iter().flatten() {
-                    //     ui.polygon(Circle::new(int, 2.0).to_poly());
-                    // }
+                    end_view(ui, &style, lh_component, lh_centre, lh_text, false, zoom);
+                    centre_view(ui, &style, lh_component, rh_component, centre);
+                    end_view(ui, &style, rh_component, rh_centre, rh_text, true, zoom);
                 });
         });
 }
@@ -133,28 +112,58 @@ pub fn fit_temp_graph(ui: &mut Ui, state: &State, hub: &Component, shaft: &Compo
         Color32::DARK_GRAY
     };
 
-    let (width, height) = (170.0, 45.0);
+    let background_colour = ui.visuals().panel_fill;
 
-    let hub_temp = hub.mat.temp;
-    let shaft_temp = shaft.mat.temp;
-    let max_temp = 1.5 * hub_temp.max(shaft_temp);
+    // let (width, height) = (170.0, 45.0);
 
-    // Not the best limits tbh, doesn't really account for negative expansions or interference
-    let y_max = hub.inner_diameter.upper_limit(Some(&hub.mat));
-    let y_min = shaft.outer_diameter.lower_limit(None);
+    // let hub_temp = hub.mat.temp;
+    // let shaft_temp = shaft.mat.temp;
+    // let max_temp = 1.5 * hub_temp.max(shaft_temp);
 
-    let hub_temp_path = Path {
-        points: vec![Point::new(hub_temp, y_min), Point::new(hub_temp, y_max)],
-    };
-    let shaft_temp_path = Path {
-        points: vec![Point::new(shaft_temp, y_min), Point::new(shaft_temp, y_max)],
+    // Not the best limits tbh, doesn't really account for negative expansions or interference (?)
+    let (y_min, y_max) = {
+        let s0 = hub.inner_diameter.upper_limit(Some(&hub.mat));
+        let s1 = shaft.outer_diameter.lower_limit(None);
+        (s0.min(s1), s0.max(s1))
     };
 
-    let temp_min = hub.mat.temp.min(shaft.mat.temp);
-    let temp_max = hub.mat.temp.max(shaft.mat.temp);
-    let (t0, t1) = (temp_min - 20.0, temp_max + 20.0);
+    // let hub_temp_path = Path {
+    //     points: vec![Point::new(hub_temp, y_min), Point::new(hub_temp, y_max)],
+    // };
+    // let shaft_temp_path = Path {
+    //     points: vec![Point::new(shaft_temp, y_min), Point::new(shaft_temp, y_max)],
+    // };
+
+    let (mut t0, mut t1) = (0.0f64, 150.0f64);
+    let (min_temp, max_temp) = (
+        hub.mat.temp.min(shaft.mat.temp),
+        hub.mat.temp.max(shaft.mat.temp),
+    );
+    t0 = t0.min(min_temp);
+    t1 = t1.max(max_temp);
+
+    // let start_temp_min = ;
+    // let start_temp_max = ;
+
+    // let reset_bounds = ui.button("Click me").clicked();
+
+    let label_format = |axis: &str, point: &PlotPoint| {
+        // At some point I'd like to have the name show up in the hover
+        // I'd need to name the lines, however I can't get it to show up currently
+        // Iterate through the name in the main plot loop [name_1, name_2]
+        let position = point.to_pos2();
+        let temp = position.x;
+        let size = position.y;
+        let temp_dp = dynamic_precision(temp as f64, 4);
+        let size_dp = dynamic_precision(size as f64, 4);
+        // format!("{axis}\n{temp:.temp_dp$}°C\n{size:.size_dp$} mm").to_owned() - isn't working great
+        format!("{temp:.temp_dp$}°C\n{size:.size_dp$} mm").to_owned()
+    };
 
     Plot::new(&plot_name)
+        .label_formatter(label_format)
+        // .x_axis_label("Temp (°C)")
+        // .y_axis_label("(mm)")
         .show_grid(false)
         .show_background(false)
         .show(ui, |ui| {
@@ -170,6 +179,22 @@ pub fn fit_temp_graph(ui: &mut Ui, state: &State, hub: &Component, shaft: &Compo
             //         .color(outline_colour)
             //         .style(LineStyle::dotted_loose()),
             // );
+
+            // Do we actually care about these temperatures? Or just need a default
+
+            // if reset_bounds {
+            //     let mut new_bounds = ui.plot_bounds().clone();
+            //     // new_bounds.merge_x(&egui_plot::PlotBounds::from_min_max(
+            //     //     [start_temp_min, y_max],
+            //     //     [start_temp_max, y_min],
+            //     // ));
+            //     new_bounds.range_x(start_temp_min..=start_temp_max);
+            //     ui.set_plot_bounds(new_bounds);
+            // }
+
+            // Buffers are used to avoid drawing lines under shaded regions
+            let mut shaded_buffer = Vec::new();
+            let mut line_buffer = Vec::new();
 
             for (component, colour) in &[(hub, Color32::RED), (shaft, Color32::BLUE)] {
                 let mat_t0 = material_at_temp(component, t0);
@@ -203,29 +228,40 @@ pub fn fit_temp_graph(ui: &mut Ui, state: &State, hub: &Component, shaft: &Compo
                     points: vec![p0_upr, p1_upr, p1_lwr, p0_lwr],
                 };
 
-                ui.polygon(
+                shaded_buffer.push(
                     path_full
                         .to_poly()
                         .stroke(Stroke {
                             width: 0.0,
                             color: Color32::TRANSPARENT,
                         })
-                        .fill_color(colour.gamma_multiply(0.1)),
+                        .fill_color(colour.gamma_multiply(0.2))
+                        .name(format!("{} tolerance zone", component.name)),
                 );
-                ui.line(path_nominal.to_line().color(outline_colour));
-                ui.line(
+                line_buffer.push(
+                    path_nominal
+                        .to_line()
+                        .color(outline_colour)
+                        .name(format!("{} nominal size", component.name)),
+                );
+                line_buffer.push(
                     path_full.segments(false)[0]
                         .to_line()
                         .color(outline_colour)
-                        .style(LineStyle::dashed_loose()),
+                        .style(LineStyle::dashed_loose())
+                        .name(format!("{} maximum size", component.name)),
                 );
-                ui.line(
+                line_buffer.push(
                     path_full.segments(false)[2]
                         .to_line()
                         .color(outline_colour)
-                        .style(LineStyle::dashed_loose()),
+                        .style(LineStyle::dashed_loose())
+                        .name(format!("{} minimum size", component.name)),
                 );
             }
+
+            shaded_buffer.into_iter().for_each(|s| ui.polygon(s));
+            line_buffer.into_iter().for_each(|l| ui.line(l));
         });
 }
 
@@ -271,6 +307,7 @@ fn end_view(
     centre: Point,
     text_pos: Point,
     right: bool,
+    zoom: f32,
 ) {
     let mut centre_size = 0.0f64;
     let line = Stroke {
@@ -295,6 +332,7 @@ fn end_view(
             text_pos,
             &component.outer_diameter,
             right,
+            zoom,
         );
 
         centre_size = centre_size.max(component.outer_diameter.size);
@@ -343,6 +381,7 @@ fn end_view(
             },
             &component.inner_diameter,
             right,
+            zoom,
         );
 
         centre_size = centre_size.max(component.inner_diameter.size);
@@ -562,10 +601,12 @@ fn diameter_limits(
     position: Point,
     feature: &Feature,
     right: bool,
+    zoom: f32,
 ) {
-    let v_pad = 5.0;
-    let h_pad = 3.5;
-    let extension = 1.5;
+    let v_pad = 6.0; // text vertical padding
+    let h_pad = 3.5; // text horizontal padding
+    let extension = 1.5; // arrow line horizontal extension
+    let text_size = 13.0 * zoom;
     let nominal_diameter = style.scale * feature.middle_limit(None);
 
     // Format the upper and lower limit text strings.
@@ -590,8 +631,8 @@ fn diameter_limits(
         // Converts the current position to screen coordinates, offsets left by the width
         // of the text and then converts back with the horizontal padding
         let mut offsetting_point = ui.screen_from_plot(diameter_pos.to_plotpoint());
-        offsetting_point.x -= text_width(&ui.ctx(), &upper_text).x;
-        diameter_pos.x = ui.plot_from_screen(offsetting_point).x - h_pad;
+        offsetting_point.x -= text_width(&ui.ctx(), &upper_text, text_size).x;
+        diameter_pos.x = ui.plot_from_screen(offsetting_point).x - 1.5 * h_pad;
     }
 
     let mut upper_pos = diameter_pos;
@@ -614,7 +655,9 @@ fn diameter_limits(
         ui.text(
             Text::new(
                 pos.to_plotpoint(),
-                RichText::new(text).size(13.0).color(style.annotate_colour),
+                RichText::new(text)
+                    .size(text_size)
+                    .color(style.annotate_colour),
             )
             .anchor(Align2::LEFT_CENTER),
         );
@@ -774,4 +817,10 @@ fn plot_arrow_leader(ui: &mut PlotUi, line: Stroke, mut tip: Point, knee: Point,
         ]))
         .stroke(line),
     );
+}
+
+fn calculate_plot_zoom(ui: &PlotUi) -> f32 {
+    let (pp1, pp2) = (PlotPoint::new(0.0, 0.0), PlotPoint::new(1.0, 0.0));
+    let (sp1, sp2) = (ui.screen_from_plot(pp1), ui.screen_from_plot(pp2));
+    sp1.distance(sp2)
 }
