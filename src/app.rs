@@ -98,7 +98,7 @@ impl eframe::App for LimitsFitsApp {
             ui.horizontal(|ui| {
                 ui.heading(RichText::new("[PFS]").strong());
                 ui.heading("|");
-                ui.heading("Precision Fit Suite");
+                ui.heading("Precision Fit Studio");
             });
 
             // Maybe the material feature button shouldn't be part of the enum and instead should be a toggle?
