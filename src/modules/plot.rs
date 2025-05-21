@@ -68,7 +68,7 @@ pub fn side_by_side(
         annotate_colour: outline_colour,
         hatch_width: 0.5,
         hatch_colour: text_colour,
-        hatch_spacing: 2.5,
+        hatch_spacing: 3.0,
         hatch_padding: 0.5,
     };
 
@@ -139,8 +139,9 @@ pub fn fit_temp_graph(ui: &mut Ui, state: &State, hub: &Component, shaft: &Compo
         hub.mat.temp.min(shaft.mat.temp),
         hub.mat.temp.max(shaft.mat.temp),
     );
-    t0 = t0.min(min_temp);
-    t1 = t1.max(max_temp);
+    // Offsets the component temperature values or clamps to a basic range
+    t0 = t0.min(min_temp - 50.0).clamp(-273.15, 2_000.0);
+    t1 = t1.max(max_temp + 50.0).clamp(-273.15, 2_000.0);
 
     // let start_temp_min = ;
     // let start_temp_max = ;

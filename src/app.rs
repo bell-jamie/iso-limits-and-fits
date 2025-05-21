@@ -59,7 +59,7 @@ impl eframe::App for LimitsFitsApp {
                 egui::widgets::global_theme_preference_switch(ui);
                 self.state.zoom.show(ui, ctx);
 
-                ui.separator();
+                // ui.separator();
 
                 ui.toggle_value(&mut self.state.advanced, "Advanced");
                 // ui.toggle_value(&mut self.state.thermal, "Thermal");
@@ -93,7 +93,13 @@ impl eframe::App for LimitsFitsApp {
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("ISO Limits and Fits Tool");
+            ui.add_space(5.0);
+
+            ui.horizontal(|ui| {
+                ui.heading(RichText::new("[PFS]").strong());
+                ui.heading("|");
+                ui.heading("Precision Fit Suite");
+            });
 
             // Maybe the material feature button shouldn't be part of the enum and instead should be a toggle?
             // This would mean that it could keep displaying the info

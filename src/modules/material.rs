@@ -447,6 +447,9 @@ pub fn temperature_output(ui: &mut Ui, state: &mut State, hub: &Component, shaft
 
                 ui.vertical(|ui| {
                     let fit = Fit::new(&hub, &shaft);
+
+                    ui.add_space(5.0); // dodgy vertical alignment
+
                     fit.show_advanced(ui, state);
                 });
 
