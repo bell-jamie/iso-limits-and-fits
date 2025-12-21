@@ -2,18 +2,18 @@
 name = "iso_limits_and_fits"
 version = "0.7.0-INDEV"
 authors = ["James Bell <jmhbell@icloud.com>"]
-edition = "2021"
+edition = "2024"
 include = ["LICENSE-APACHE", "LICENSE-MIT", "**/*.rs", "Cargo.toml"]
-rust-version = "1.83"
+rust-version = "1.85"
 
 [package.metadata.docs.rs]
 all-features = true
 targets = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
 
 [dependencies]
-egui = "0.30.0"
-egui_plot = "0.30.0"
-eframe = { version = "0.30.0", default-features = false, features = [
+egui = "0.33"
+egui_plot = "0.34"
+eframe = { version = "0.33", default-features = false, features = [
     "accesskit",     # Make egui compatible with screen readers. NOTE: adds a lot of dependencies.
     "default_fonts", # Embed the default egui fonts.
     "glow",          # Use the glow rendering backend. Alternative: "wgpu".
@@ -25,6 +25,8 @@ log = "0.4"
 serde = { version = "1", features = ["derive"] }
 rand = "0.8.5"
 getrandom = { version = "0.2", features = ["js"] }
+redprint = { git = "https://github.com/bell-jamie/redprint.git", features = ["egui", "serde"] }
+egui_flex = "0.5.0"
 
 # native:
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]

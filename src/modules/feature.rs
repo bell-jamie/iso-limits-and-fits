@@ -1,9 +1,9 @@
-use egui::{ComboBox, DragValue, Grid, SelectableLabel, Ui};
+use egui::{Button, ComboBox, DragValue, Grid, RichText, SelectableLabel, Ui};
 
 use super::{
     material::Material,
     tolerance::{GradesDeviations, Iso, Tolerance},
-    utils::{decimals, req_precision, State},
+    utils::{State, decimals, req_precision},
 };
 
 // #[derive(Clone, serde::Deserialize, serde::Serialize)]
@@ -172,37 +172,56 @@ impl Feature {
             0.0..=3_150.0
         };
 
+        // Calculate available width for expanding elements
+        let available = ui.available_width();
+        let spacing = ui.spacing().item_spacing.x;
+        // Fixed elements: ISO button (35), sync/enable button (~24), spacing between 5 elements
+        let fixed_width = 35.0 + 24.0 + spacing * 4.0;
+        // Remaining width split between size input and two combo boxes (or tolerance inputs)
+        let flex_width = ((available - fixed_width) / 3.0).max(50.0);
+
         ui.horizontal(|ui| {
             if ui
-                .add_sized([35.0, 18.0], SelectableLabel::new(self.standard, "ISO"))
+                .add_sized(
+                    [35.0, 18.0],
+                    Button::selectable(self.standard, "ISO").frame_when_inactive(true),
+                )
                 .on_hover_text("Toggle ISO limits")
                 .clicked()
             {
                 self.standard = !self.standard;
             }
 
+            // if self.primary {
+            //     ui.toggle_value(&mut state.sync_size, "🔃")
+            //         .on_hover_text("Sync");
+            // } else {
+            //     ui.toggle_value(&mut self.enabled, "✔")
+            //         .on_hover_text("Enable dimension");
+            // }
+
             if self.primary {
-                ui.toggle_value(&mut state.sync_size, "🔃")
-                    .on_hover_text("Sync");
+                if ui
+                    .add(Button::selectable(state.sync_size, "🔃").frame_when_inactive(true))
+                    .on_hover_text("Sync")
+                    .clicked()
+                {
+                    state.sync_size = !state.sync_size;
+                }
             } else {
-                ui.toggle_value(&mut self.enabled, "✔")
-                    .on_hover_text("Enable dimension");
+                if ui
+                    .add(Button::selectable(self.enabled, "✔").frame_when_inactive(true))
+                    .on_hover_text("Enable dimension")
+                    .clicked()
+                {
+                    self.enabled = !self.enabled;
+                }
             }
 
             let size_drag = ui.add_enabled(self.enabled, |ui: &mut Ui| {
                 ui.add_sized(
-                    [50.0, 18.0],
-                    DragValue::new(&mut self.size)
-                        // .custom_formatter(|s, _| format!("{s} mm"))
-                        // .custom_parser(|s| {
-                        //     let to_parse = s
-                        //         .chars()
-                        //         .filter(|c| c.is_ascii_digit() || c == &'.')
-                        //         .collect::<String>();
-                        //     to_parse.parse::<f64>().ok()
-                        // })
-                        .speed(0.1)
-                        .range(size_range),
+                    [flex_width, 18.0],
+                    DragValue::new(&mut self.size).speed(0.1).range(size_range),
                 )
                 .on_hover_text("Size")
             });
@@ -214,7 +233,7 @@ impl Feature {
             if self.standard {
                 ui.add_enabled(self.enabled, |ui: &mut Ui| {
                     ComboBox::from_id_salt(format!("{}_deviation", id))
-                        .width(50.0)
+                        .width(flex_width)
                         .selected_text(&self.iso.deviation)
                         .show_ui(ui, |ui| {
                             for letter in if self.hole {
@@ -235,7 +254,7 @@ impl Feature {
 
                 ui.add_enabled(self.enabled, |ui: &mut Ui| {
                     ComboBox::from_id_salt(format!("{}_grade", id))
-                        .width(50.0)
+                        .width(flex_width)
                         .selected_text(&self.iso.grade)
                         .show_ui(ui, |ui| {
                             for grade in &dropdowns.it_numbers {
@@ -249,7 +268,7 @@ impl Feature {
             } else {
                 ui.add_enabled(self.enabled, |ui: &mut Ui| {
                     ui.add_sized(
-                        [50.0, 18.0],
+                        [flex_width, 18.0],
                         DragValue::new(&mut self.tolerance.lower)
                             .speed(0.001)
                             .range(-self.size..=self.tolerance.upper)
@@ -259,7 +278,7 @@ impl Feature {
                 });
                 ui.add_enabled(self.enabled, |ui: &mut Ui| {
                     ui.add_sized(
-                        [50.0, 18.0],
+                        [flex_width, 18.0],
                         DragValue::new(&mut self.tolerance.upper)
                             .speed(0.001)
                             .range(self.tolerance.lower..=f64::MAX)
@@ -268,8 +287,6 @@ impl Feature {
                     .on_hover_text("Upper limit")
                 });
             }
-
-            // check_width(ui);
         });
     }
 
@@ -308,55 +325,86 @@ impl Feature {
         Grid::new(id)
             .striped(false)
             .min_col_width(10.0)
+            .spacing([15.0, 4.0])
             .show(ui, |ui| {
+                // ui.label(RichText::new("⬆").color(ui.visuals().selection.bg_fill))
                 ui.label("⬆")
                     .on_hover_cursor(egui::CursorIcon::Default)
                     .on_hover_text("Upper limit");
-                ui.label(format!("{:.precision$}", upper_trunc));
-                ui.label("mm");
-                if mat.is_none() {
-                    ui.label(format!(
-                        "{}{}",
-                        if self.tolerance.upper.is_sign_positive() {
-                            "+"
-                        } else {
-                            ""
-                        },
-                        decimals(scale * self.tolerance.upper, -1)
-                    ));
-                    ui.label(format!("{units}"));
-                }
+                ui.label(format!("{:.precision$} mm", upper_trunc));
+
+                // if mat.is_none() {
+                ui.label(format!(
+                    "{}",
+                    if self.tolerance.upper.is_sign_positive() {
+                        "+"
+                    } else {
+                        "-"
+                    }
+                ));
+                ui.label(format!(
+                    "{} {units}",
+                    decimals(scale * self.tolerance.upper.abs(), -1)
+                ));
+                // ui.label(format!(
+                //     "{}{}",
+                //     if self.tolerance.upper.is_sign_positive() {
+                //         "+"
+                //     } else {
+                //         ""
+                //     },
+                //     decimals(scale * self.tolerance.upper, -1)
+                // ));
+                // ui.label(format!("{units}"));
+                // }
                 ui.end_row();
 
                 // ui.label("⬌");
                 ui.label("⬍")
                     .on_hover_cursor(egui::CursorIcon::Default)
                     .on_hover_text("Mid-limits");
-                ui.label(format!("{:.precision$}", middle_trunc));
-                ui.label("mm");
-                if mat.is_none() {
-                    ui.label(format!("±{:.}", decimals(scale * self.tolerance.mid(), -1)));
-                    ui.label(format!("{units}"));
-                }
+                ui.label(format!("{:.precision$} mm", middle_trunc));
+                // ui.label("mm");
+                ui.label("±");
+                ui.label(format!(
+                    "{} {units}",
+                    decimals(scale * self.tolerance.mid(), -1)
+                ));
+                // if mat.is_none() {
+                //     ui.label(format!("±{:.}", decimals(scale * self.tolerance.mid(), -1)));
+                //     ui.label(format!("{units}"));
+                // }
                 ui.end_row();
 
                 ui.label("⬇")
                     .on_hover_cursor(egui::CursorIcon::Default)
                     .on_hover_text("Lower limit");
-                ui.label(format!("{:.precision$}", lower_trunc));
-                ui.label("mm");
-                if mat.is_none() {
-                    ui.label(format!(
-                        "{}{}",
-                        if self.tolerance.lower.is_sign_positive() {
-                            "+"
-                        } else {
-                            ""
-                        },
-                        decimals(scale * self.tolerance.lower, -1)
-                    ));
-                    ui.label(format!("{units}"));
-                }
+                ui.label(format!("{:.precision$} mm", lower_trunc));
+                // ui.label("mm");
+                ui.label(format!(
+                    "{}",
+                    if self.tolerance.lower.is_sign_positive() {
+                        "+"
+                    } else {
+                        "-"
+                    }
+                ));
+                ui.label(format!(
+                    "{} {units}",
+                    decimals(scale * self.tolerance.lower.abs(), -1)
+                ));
+                // if mat.is_none() {
+                // ui.label(format!(
+                //     "{}{}",
+                //     if self.tolerance.lower.is_sign_positive() {
+                //         "+"
+                //     } else {
+                //         ""
+                //     },
+                //     decimals(scale * self.tolerance.lower, -1)
+                // ));
+                // ui.label(format!("{units}"));
+                // }
                 ui.end_row();
             });
     }

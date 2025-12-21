@@ -2,7 +2,7 @@ use egui::{Grid, RichText, Ui};
 
 use super::{
     component::Component,
-    utils::{decimals, State},
+    utils::{State, decimals},
 };
 
 #[derive(serde::Deserialize, serde::Serialize)]
@@ -69,7 +69,7 @@ impl Fit {
         ui.horizontal(|ui| {
             egui::Frame::group(ui.style())
                 .inner_margin(10.0)
-                .rounding(10.0)
+                .corner_radius(10.0)
                 .show(ui, |ui| {
                     ui.vertical(|ui| {
                         self.fit_title_ui(ui);
@@ -85,7 +85,7 @@ impl Fit {
 
                 egui::Frame::group(ui.style())
                     .inner_margin(10.0)
-                    .rounding(10.0)
+                    .corner_radius(10.0)
                     .show(ui, |ui| {
                         ui.vertical(|ui| {
                             ui.label(RichText::new("At Temperature").strong().size(15.0));
@@ -161,7 +161,7 @@ impl Fit {
                         };
 
                     if ui.button(fit_text.clone()).on_hover_text("Copy").clicked() {
-                        ui.output_mut(|o| o.copied_text = fit_text);
+                        ui.ctx().copy_text(fit_text);
                     }
                 }
             });
@@ -171,11 +171,12 @@ impl Fit {
     fn fit_output_ui(&self, ui: &mut Ui, units: &str, scale: f64, thermal: bool) {
         let id = if thermal { "thermal_fit" } else { "fit" };
 
-        let (female_mat, male_mat) = if thermal {
-            (Some(&self.female.mat), Some(&self.male.mat))
-        } else {
-            (None, None)
-        };
+        // TODO: Update to use material_id lookup when thermal is re-enabled
+        let (female_mat, male_mat): (
+            Option<&super::material::Material>,
+            Option<&super::material::Material>,
+        ) = (None, None);
+        let _ = thermal; // suppress unused warning
 
         let condition = |mc: f64| {
             if mc.is_sign_positive() {

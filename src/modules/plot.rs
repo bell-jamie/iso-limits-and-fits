@@ -1,15 +1,22 @@
-use std::f64::{consts::PI, EPSILON};
+use std::f64::{self, EPSILON, consts::PI};
 
-use egui::{epaint::CircleShape, vec2, Align2, Color32, Frame, RichText, Stroke, Ui};
+use egui::{Align2, Color32, Frame, RichText, Stroke, Ui, epaint::CircleShape, vec2};
 use egui_plot::{Line, LineStyle, Plot, PlotItem, PlotPoint, PlotPoints, PlotUi, Polygon, Text};
 use serde::Deserialize;
 
 use super::{
     component::Component,
     feature::Feature,
-    geometry::{Circle, Path, Point, Rectangle, Segment, SineSegment},
-    utils::{dynamic_precision, text_width, State},
+    utils::{State, dynamic_precision, text_width},
 };
+
+use redprint::core::transform::Transform;
+use redprint::core::{Component as RedprintComponent, Path};
+use redprint::core::{
+    ComponentStyle, HatchingStyle,
+    primitives::{Circle, Point, Segment},
+};
+use redprint::render::egui::render_component;
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct Style {
@@ -36,14 +43,11 @@ pub fn side_by_side(
     let (width, height) = (170.0, 45.0);
     let (centre, lh_centre) = (Point::new(0.0, 0.0), Point::new(-50.0, 0.0));
 
-    let mut rh_centre = lh_centre;
-    rh_centre.mirror_in_y();
+    let rh_centre = Transform::mirror_y().transform_point(lh_centre);
 
-    let mut lh_text = lh_centre;
-    lh_text.offset(-20.0, 20.0);
+    let lh_text = Point::new(lh_centre.x - 20.0, lh_centre.y + 20.0);
 
-    let mut rh_text = lh_text;
-    rh_text.mirror_in_y();
+    let rh_text = Transform::mirror_y().transform_point(lh_text);
 
     let background_colour = ui.visuals().window_fill;
     let outline_colour = if ui.visuals().dark_mode {
@@ -74,7 +78,7 @@ pub fn side_by_side(
 
     Frame::group(ui.style())
         .inner_margin(10.0)
-        .rounding(10.0)
+        .corner_radius(10.0)
         .show(ui, |ui| {
             // ui.set_min_size(vec2(514.0, 175.0));
             ui.set_max_size(vec2(514.0, 160.0));
@@ -97,7 +101,16 @@ pub fn side_by_side(
         });
 }
 
-pub fn fit_temp_graph(ui: &mut Ui, state: &State, hub: &Component, shaft: &Component) {
+// TODO: Update to use material_id lookup when thermal is re-enabled
+#[allow(dead_code)]
+fn _fit_temp_graph(_plot_ui: &mut Ui, _state: &State, _hub: &Component, _shaft: &Component) {
+    unimplemented!("Needs update to use material_id");
+}
+
+#[allow(dead_code)]
+fn _fit_temp_graph_old(plot_ui: &mut Ui, state: &State, hub: &Component, shaft: &Component) {
+    let _ = (plot_ui, state, hub, shaft);
+    /*
     let material_at_temp = |component: &Component, temp: f64| {
         let mut material = component.mat.clone();
         material.temp = temp;
@@ -106,13 +119,13 @@ pub fn fit_temp_graph(ui: &mut Ui, state: &State, hub: &Component, shaft: &Compo
 
     let plot_name = "temp_graph";
 
-    let outline_colour = if ui.visuals().dark_mode {
+    let outline_colour = if plot_ui.visuals().dark_mode {
         Color32::LIGHT_GRAY
     } else {
         Color32::DARK_GRAY
     };
 
-    let background_colour = ui.visuals().panel_fill;
+    let background_colour = plot_ui.visuals().panel_fill;
 
     // let (width, height) = (170.0, 45.0);
 
@@ -167,36 +180,47 @@ pub fn fit_temp_graph(ui: &mut Ui, state: &State, hub: &Component, shaft: &Compo
         // .y_axis_label("(mm)")
         .show_grid(false)
         .show_background(false)
-        .show(ui, |ui| {
-            // ui.line(
-            //     hub_temp_path
-            //         .to_line()
-            //         .color(outline_colour)
-            //         .style(LineStyle::dotted_loose()),
-            // );
-            // ui.line(
-            //     shaft_temp_path
-            //         .to_line()
-            //         .color(outline_colour)
-            //         .style(LineStyle::dotted_loose()),
-            // );
+        .show(plot_ui, |plot_ui| {
+            for (component, colour) in &[(hub, Color32::RED), (shaft, Color32::BLUE)] {
+                let mat_t0 = material_at_temp(component, t0);
+                let mat_t1 = material_at_temp(component, t1);
 
-            // Do we actually care about these temperatures? Or just need a default
+                let (t0_upr, t0_mid, t0_lwr) = (
+                    component.primary_feature().upper_limit(Some(&mat_t0)),
+                    component.primary_feature().middle_limit(Some(&mat_t0)),
+                    component.primary_feature().lower_limit(Some(&mat_t0)),
+                );
 
-            // if reset_bounds {
-            //     let mut new_bounds = ui.plot_bounds().clone();
-            //     // new_bounds.merge_x(&egui_plot::PlotBounds::from_min_max(
-            //     //     [start_temp_min, y_max],
-            //     //     [start_temp_max, y_min],
-            //     // ));
-            //     new_bounds.range_x(start_temp_min..=start_temp_max);
-            //     ui.set_plot_bounds(new_bounds);
-            // }
+                let (t1_upr, t1_mid, t1_lwr) = (
+                    component.primary_feature().upper_limit(Some(&mat_t1)),
+                    component.primary_feature().middle_limit(Some(&mat_t1)),
+                    component.primary_feature().lower_limit(Some(&mat_t1)),
+                );
 
-            // Buffers are used to avoid drawing lines under shaded regions
-            let mut shaded_buffer = Vec::new();
-            let mut line_buffer = Vec::new();
+                let (p0_upr, p1_upr, p0_lwr, p1_lwr) = (
+                    Point::new(t0, t0_upr),
+                    Point::new(t1, t1_upr),
+                    Point::new(t0, t0_lwr),
+                    Point::new(t1, t1_lwr),
+                );
 
+                let path_full = redprint::core::Component::builder("name")
+                    .style(ComponentStyle {
+                        stroke_colour: ([255, 0, 0, 255]),
+                        stroke_width: (0.0),
+                        fill_colour: (colour.gamma_multiply(0.2).to_srgba_unmultiplied()),
+                    })
+                    .add_path()
+                    .point(p0_lwr)
+                    .point(p1_lwr)
+                    .point(p1_upr)
+                    .point(p0_upr)
+                    .close()
+                    .build();
+                render_component(plot_ui, &path_full, None, None);
+            }
+
+            // Render lines
             for (component, colour) in &[(hub, Color32::RED), (shaft, Color32::BLUE)] {
                 let mat_t0 = material_at_temp(component, t0);
                 let mat_t1 = material_at_temp(component, t1);
@@ -222,82 +246,87 @@ pub fn fit_temp_graph(ui: &mut Ui, state: &State, hub: &Component, shaft: &Compo
                     Point::new(t1, t1_lwr),
                 );
 
-                let path_nominal = Path {
-                    points: vec![p0_mid, p1_mid],
-                };
-                let path_full = Path {
-                    points: vec![p0_upr, p1_upr, p1_lwr, p0_lwr],
+                let style = ComponentStyle {
+                    stroke_colour: outline_colour.to_srgba_unmultiplied(),
+                    stroke_width: 1.0,
+                    fill_colour: colour.to_srgba_unmultiplied(),
                 };
 
-                shaded_buffer.push(
-                    path_full
-                        .to_poly()
-                        .stroke(Stroke {
-                            width: 0.0,
-                            color: Color32::TRANSPARENT,
-                        })
-                        .fill_color(colour.gamma_multiply(0.2))
-                        .name(format!("{} tolerance zone", component.name)),
-                );
-                line_buffer.push(
-                    path_nominal
-                        .to_line()
-                        .color(outline_colour)
-                        .name(format!("{} nominal size", component.name)),
-                );
-                line_buffer.push(
-                    path_full.segments(false)[0]
-                        .to_line()
-                        .color(outline_colour)
-                        .style(LineStyle::dashed_loose())
-                        .name(format!("{} maximum size", component.name)),
-                );
-                line_buffer.push(
-                    path_full.segments(false)[2]
-                        .to_line()
-                        .color(outline_colour)
-                        .style(LineStyle::dashed_loose())
-                        .name(format!("{} minimum size", component.name)),
-                );
+                // Nominal line (mid to mid)
+                let nominal =
+                    RedprintComponent::builder(format!("{}_nominal_line", component.name))
+                        .style(style)
+                        .add_path()
+                        .point(p0_mid)
+                        .point(p1_mid)
+                        .build();
+
+                // Upper limit line
+                let upper_limit =
+                    RedprintComponent::builder(format!("{}_upper_line", component.name))
+                        .style(style)
+                        .add_path()
+                        .point(p0_upr)
+                        .point(p1_upr)
+                        .build();
+
+                // Lower limit line
+                let lower_limit =
+                    RedprintComponent::builder(format!("{}_lower_line", component.name))
+                        .style(style)
+                        .add_path()
+                        .point(p0_lwr)
+                        .point(p1_lwr)
+                        .build();
+
+                render_component(plot_ui, &nominal, None, None);
+                render_component(plot_ui, &upper_limit, None, None);
+                render_component(plot_ui, &lower_limit, None, None);
             }
-
-            shaded_buffer.into_iter().for_each(|s| ui.polygon(s));
-            line_buffer.into_iter().for_each(|l| ui.line(l));
         });
+    */
 }
 
 fn set_plot_limits(ui: &mut PlotUi, style: &Style, visible: bool, x: f64, y: f64) {
+    let (p0, p1, p2) = (
+        Point::new(x, 0.9 * y),
+        Point::new(x, y),
+        Point::new(0.9 * x, y),
+    );
+    let (mirror_x, mirror_y, around_origin) = (
+        Transform::mirror_x(),
+        Transform::mirror_y(),
+        Transform::rotation_around(Point::origin(), std::f64::consts::PI),
+    );
     if visible {
-        let (dx, dy) = (x / 10.0, y / 10.0);
-        let mut marker = Path {
-            points: vec![
-                Point::new(-x + dx, y),
-                Point::new(-x, y),
-                Point::new(-x, y - dy),
-            ],
-        };
-        for _ in 0..2 {
-            for _ in 0..2 {
-                ui.line(marker.to_line().stroke(Stroke {
-                    width: 1.0,
-                    color: Color32::RED,
-                }));
-
-                marker.mirror_in_y();
-            }
-
-            marker.mirror_in_x();
-        }
+        let mut markers = redprint::core::Component::builder("markers")
+            .add_path()
+            .point(p0)
+            .point(p1)
+            .point(p2)
+            .add_path()
+            .point(p0.transformed(mirror_y))
+            .point(p1.transformed(mirror_y))
+            .point(p2.transformed(mirror_y))
+            .add_path()
+            .point(around_origin.transform_point(p0))
+            .point(around_origin.transform_point(p1))
+            .point(around_origin.transform_point(p2))
+            .add_path()
+            .point(p0.transformed(mirror_x))
+            .point(p1.transformed(mirror_x))
+            .point(p2.transformed(mirror_x))
+            .build();
+        markers.set_stroke_colour([255, 0, 0, 255]);
+        render_component(ui, &markers, None, None);
     } else {
-        ui.polygon(
-            Rectangle::new([-x, y], [x, -y])
-                .to_poly()
-                .stroke(Stroke {
-                    width: 1.0,
-                    color: style.background_colour,
-                })
-                .fill_color(Color32::TRANSPARENT),
-        );
+        let mut diag = RedprintComponent::builder("diag")
+            .add_path()
+            .point(p1)
+            .point(around_origin.transform_point(p1))
+            .build();
+        diag.set_stroke_width(0.0);
+        render_component(ui, &diag, None, None);
     }
 }
 
@@ -318,12 +347,15 @@ fn end_view(
 
     if component.outer_diameter.enabled {
         // Outer circle
-        ui.polygon(
-            Circle::new(centre, 0.5 * style.scale * component.outer_diameter.size)
-                .to_poly()
-                .stroke(line)
-                .fill_color(Color32::TRANSPARENT),
-        );
+        // let circle = Circle::new(centre, 0.5 * style.scale * component.outer_diameter.size);
+        let circle = RedprintComponent::builder(format!("{}_outer", component.name))
+            .add_circle(centre, 0.5 * style.scale * component.outer_diameter.size)
+            .build();
+        render_component(ui, &circle, None, None);
+        // if let Some(poly) = render_circle(&circle, 1000) {
+        //     // TODO: redprint method for drawing circles
+        //     ui.polygon(poly.stroke(line).fill_color(Color32::TRANSPARENT));
+        // }
 
         // Outer diameter dimension
         diameter_limits(
@@ -352,34 +384,39 @@ fn end_view(
         //         .style(LineStyle::dashed_dense()),
         // );
 
-        ui.polygon(
-            Circle::new(centre, 0.5 * style.scale * component.outer_diameter.size)
-                .to_poly()
-                .stroke(line)
-                .style(LineStyle::dashed_dense())
-                .fill_color(Color32::TRANSPARENT),
-        );
+        // let circle = Circle::new(centre, 0.5 * style.scale * component.outer_diameter.size);
+        // if let Some(poly) = render_circle(&circle, 1000) {
+        //     ui.polygon(
+        //         poly.stroke(line)
+        //             .style(LineStyle::dashed_dense())
+        //             .fill_color(Color32::TRANSPARENT),
+        //     );
+        // }
+
+        // TODO: dashed lines!
+        let circle = RedprintComponent::builder(format!("{}_outer", component.name))
+            .add_circle(centre, 0.5 * style.scale * component.outer_diameter.size)
+            .build();
+        render_component(ui, &circle, None, None);
     }
 
     if component.inner_diameter.enabled {
         // Inner circle
-        ui.polygon(
-            Circle::new(centre, 0.5 * style.scale * component.inner_diameter.size)
-                .to_poly()
-                .stroke(line)
-                .fill_color(Color32::TRANSPARENT),
-        );
+        // let circle = Circle::new(centre, 0.5 * style.scale * component.inner_diameter.size);
+        // if let Some(poly) = render_circle(&circle, 1000) {
+        //     ui.polygon(poly.stroke(line).fill_color(Color32::TRANSPARENT));
+        // }
+        let circle = RedprintComponent::builder(format!("{}_inner", component.name))
+            .add_circle(centre, 0.5 * style.scale * component.inner_diameter.size)
+            .build();
+        render_component(ui, &circle, None, None);
 
         // Inner diameter dimension
         diameter_limits(
             ui,
             style,
             centre,
-            {
-                let mut point = text_pos.clone();
-                point.mirror_in_x();
-                point
-            },
+            Transform::mirror_x().transform_point(text_pos),
             &component.inner_diameter,
             right,
             zoom,
@@ -393,7 +430,7 @@ fn end_view(
 }
 
 fn centre_view(
-    ui: &mut PlotUi,
+    plot_ui: &mut PlotUi,
     style: &Style,
     left_component: &Component,
     right_component: &Component,
@@ -418,7 +455,7 @@ fn centre_view(
     );
 
     hatched_section(
-        ui,
+        plot_ui,
         style,
         45.0,
         p1,
@@ -426,15 +463,15 @@ fn centre_view(
         !left_component.outer_diameter.enabled,
     ); // upper rect
 
-    p1.mirror_in_x();
-    p2.mirror_in_x();
+    let p1_mirrored = Transform::mirror_x().transform_point(p1);
+    let p2_mirrored = Transform::mirror_x().transform_point(p2);
 
     hatched_section(
-        ui,
+        plot_ui,
         style,
         45.0,
-        p1,
-        p2,
+        p1_mirrored,
+        p2_mirrored,
         !left_component.outer_diameter.enabled,
     ); // lower rect
 
@@ -448,12 +485,12 @@ fn centre_view(
             style.scale * right_component.inner_diameter.middle_limit(None) / 2.0,
         );
 
-        hatched_section(ui, style, -45.0, p1, p2, false); // upper rect
+        hatched_section(plot_ui, style, -45.0, p1, p2, false); // upper rect
 
-        p1.mirror_in_x();
-        p2.mirror_in_x();
+        let p1_mirrored = Transform::mirror_x().transform_point(p1);
+        let p2_mirrored = Transform::mirror_x().transform_point(p2);
 
-        hatched_section(ui, style, -45.0, p1, p2, false);
+        hatched_section(plot_ui, style, -45.0, p1_mirrored, p2_mirrored, false);
     // lower rect
     } else {
         let p1 = Point::new(
@@ -465,47 +502,68 @@ fn centre_view(
             -style.scale * right_component.outer_diameter.middle_limit(None) / 2.0,
         );
 
-        hatched_section(ui, style, -45.0, p1, p2, false);
+        hatched_section(plot_ui, style, -45.0, p1, p2, false);
     }
 
     // Interference
     if left_component.inner_diameter.middle_limit(None)
         < right_component.outer_diameter.middle_limit(None)
     {
-        let mut p1 = Point::new(
+        let p1 = Point::new(
             left,
             0.5 * style.scale * right_component.outer_diameter.middle_limit(None),
         );
-        let mut p2 = Point::new(
+        let p2 = Point::new(
             right,
             0.5 * style.scale * left_component.inner_diameter.middle_limit(None),
         );
 
-        ui.polygon(
-            Rectangle::from_2(p1, p2)
-                .to_poly()
-                .stroke(Stroke {
-                    width: 0.0,
-                    color: Color32::TRANSPARENT,
-                })
-                .fill_color(Color32::RED),
-        );
+        let mut upper_interference = RedprintComponent::builder("upper_interference")
+            .add_rect_2(p1, p2)
+            .build();
+        upper_interference.set_stroke_width(0.0);
+        upper_interference.set_fill_colour([255, 0, 0, 255]);
+        render_component(plot_ui, &upper_interference, None, None);
 
-        p1.mirror_in_x();
-        p2.mirror_in_x();
+        let mut lower_interference = RedprintComponent::builder("lower_interference")
+            .add_rect_2(
+                p1.transformed(Transform::mirror_x()),
+                p2.transformed(Transform::mirror_x()),
+            )
+            .build();
+        lower_interference.set_stroke_width(0.0);
+        lower_interference.set_fill_colour([255, 0, 0, 255]);
+        render_component(plot_ui, &lower_interference, None, None);
 
-        ui.polygon(
-            Rectangle::from_2(p1, p2)
-                .to_poly()
-                .stroke(Stroke {
-                    width: 0.0,
-                    color: Color32::TRANSPARENT,
-                })
-                .fill_color(Color32::RED),
-        );
+        // if let Some(rect_comp) = build_rectangle(p1, p2) {
+        //     if let Some(poly) = render_component_as_polygon(&rect_comp) {
+        //         ui.polygon(
+        //             poly.stroke(Stroke {
+        //                 width: 0.0,
+        //                 color: Color32::TRANSPARENT,
+        //             })
+        //             .fill_color(Color32::RED),
+        //         );
+        //     }
+        // }
+
+        // let p1_mirrored = Transform::mirror_x().transform_point(p1);
+        // let p2_mirrored = Transform::mirror_x().transform_point(p2);
+
+        // if let Some(rect_comp) = build_rectangle(p1_mirrored, p2_mirrored) {
+        //     if let Some(poly) = render_component_as_polygon(&rect_comp) {
+        //         ui.polygon(
+        //             poly.stroke(Stroke {
+        //                 width: 0.0,
+        //                 color: Color32::TRANSPARENT,
+        //             })
+        //             .fill_color(Color32::RED),
+        //         );
+        //     }
+        // }
     }
 
-    plot_centreline(ui, style, centre, right, 0.0);
+    plot_centreline(plot_ui, style, centre, right, 0.0);
 }
 
 fn hatched_section(
@@ -516,17 +574,25 @@ fn hatched_section(
     p2: Point,
     broken: bool,
 ) {
-    // Create section outline and bounding box for the hatching
-    let mut section = Rectangle::from_2(p1, p2);
-    let mut hatching = section.clone();
-    hatching.offset(-style.hatch_padding); // Add padding to hatching
+    // TODO: redprint missing - This function needs:
+    // 1. Rectangle geometry with offset, centre(), and path access
+    // 2. Path segments() method
+    // 3. SineSegment for wavy lines
+    // 4. Path intersections() method
+    // 5. Segment::from_point_length() and offset_vector() methods
+    // For now, draw a simple rectangle outline instead of hatched section
 
-    // ui.polygon(hatching.to_poly()); // Uncomment to show hatching outline
+    let mut upper = RedprintComponent::builder(format!("test_hatched"))
+        .add_rect_2(p1, p2)
+        .build();
+    upper.set_hatching_style(HatchingStyle::standard());
+    render_component(ui, &upper, None, None);
 
+    /* Original complex hatching code - commented out until redprint has needed features:
     if broken {
         // Draw main edges
         for edge in section.path.segments(false) {
-            ui.line(edge.to_line().stroke(Stroke {
+            ui.line(edge.to_line_static().stroke(Stroke {
                 width: style.line_width,
                 color: style.line_colour,
             }));
@@ -550,7 +616,7 @@ fn hatched_section(
         ui.line(
             section_sine
                 .to_path()
-                .to_line()
+                .to_line_static()
                 .stroke(Stroke {
                     width: style.line_width,
                     color: style.line_colour,
@@ -559,16 +625,12 @@ fn hatched_section(
         );
     } else {
         // Drawing section outline
-        ui.polygon(
-            section
-                .path
-                .to_poly()
-                .fill_color(Color32::TRANSPARENT)
-                .stroke(Stroke {
-                    width: style.line_width,
-                    color: style.line_colour,
-                }),
-        );
+        if let Some(poly) = section.path.to_poly_static() {
+            ui.polygon(poly.fill_color(Color32::TRANSPARENT).stroke(Stroke {
+                width: style.line_width,
+                color: style.line_colour,
+            }));
+        }
     }
 
     // HATCHING MOVES WITH SIZE CHANGE... CAUSE IS FROM_CENTRE METHOD
@@ -583,7 +645,7 @@ fn hatched_section(
             };
             let points = PlotPoints::new(vec![p1.to_array(), p2.to_array()]);
 
-            ui.line(Line::new(points).stroke(Stroke {
+            ui.line(Line::new("", points).stroke(Stroke {
                 width: style.hatch_width,
                 color: style.hatch_colour,
             }));
@@ -593,6 +655,7 @@ fn hatched_section(
 
         angle += 180.0
     }
+    */
 }
 
 fn diameter_limits(
@@ -619,11 +682,9 @@ fn diameter_limits(
     let mut knee = position; // Implicit copy
     knee.x -= if right { 1.0 } else { -1.0 } * extension;
 
-    let leader_spine = Segment::new(knee, centre);
-    let feature_circle = Circle::new(centre, 0.5 * nominal_diameter);
-    let tip = feature_circle
-        .intersections(&leader_spine)
-        .unwrap_or(vec![centre])[0];
+    // TODO: redprint missing - Circle::intersections() method
+    // For now, just use the knee point as tip
+    let tip = knee;
 
     let mut diameter_pos = position;
     if right {
@@ -631,16 +692,14 @@ fn diameter_limits(
     } else {
         // Converts the current position to screen coordinates, offsets left by the width
         // of the text and then converts back with the horizontal padding
-        let mut offsetting_point = ui.screen_from_plot(diameter_pos.to_plotpoint());
+        let mut offsetting_point = ui.screen_from_plot(diameter_pos.into());
         offsetting_point.x -= text_width(&ui.ctx(), &upper_text, text_size).x;
         diameter_pos.x = ui.plot_from_screen(offsetting_point).x - 1.5 * h_pad;
     }
 
-    let mut upper_pos = diameter_pos;
-    upper_pos.offset(h_pad, 0.5 * v_pad);
+    let upper_pos = Point::new(diameter_pos.x + h_pad, diameter_pos.y + 0.5 * v_pad);
 
-    let mut lower_pos = upper_pos;
-    lower_pos.y -= v_pad;
+    let lower_pos = Point::new(upper_pos.x, upper_pos.y - v_pad);
 
     let line = Stroke {
         width: style.annotate_width,
@@ -655,7 +714,8 @@ fn diameter_limits(
     let mut draw_text = |pos: Point, text| {
         ui.text(
             Text::new(
-                pos.to_plotpoint(),
+                "",
+                pos.into(),
                 RichText::new(text)
                     .size(text_size)
                     .color(style.annotate_colour),
@@ -669,7 +729,13 @@ fn diameter_limits(
     draw_text(lower_pos, lower_text);
 }
 
-fn arrow_head(colour: Color32, centre: Point, angle: f64) -> Polygon {
+fn arrow_head(colour: Color32, centre: Point, angle: f64) -> Option<Polygon<'static>> {
+    // TODO: redprint missing - Need to transform points manually before building component
+    // Original code used Path with translate, scale, rotate methods
+    // For now, return None to skip arrow heads
+    None
+
+    /* Original code:
     let mut head = Path {
         points: vec![
             Point::new(0.0, 0.0),
@@ -680,13 +746,15 @@ fn arrow_head(colour: Color32, centre: Point, angle: f64) -> Polygon {
     head.translate(centre.x, centre.y);
     head.scale(centre, 3.0);
     head.rotate(centre, angle);
-    head.to_poly().fill_color(colour).stroke(Stroke {
-        width: 0.1,
-        color: colour,
-    })
+    */
 }
 
 fn plot_centre_mark(ui: &mut PlotUi, style: &Style, centre: Point, size: f64, angle: f64) {
+    // TODO: redprint missing - This function needs Path transformations (rotate, translate, scale)
+    // and iteration over Path.points which is private
+    // Skipping centre mark rendering for now
+
+    /* Original code:
     let line = Stroke {
         width: style.line_width,
         color: style.line_colour,
@@ -721,27 +789,28 @@ fn plot_centre_mark(ui: &mut PlotUi, style: &Style, centre: Point, size: f64, an
     underlay.translate(centre.x, centre.y);
 
     for _ in 0..2 {
-        ui.polygon(
-            underlay
-                .to_poly()
-                .stroke(Stroke {
+        if let Some(poly) = underlay.to_poly_static() {
+            ui.polygon(
+                poly.stroke(Stroke {
                     width: 0.0,
                     color: style.background_colour,
                 })
                 .fill_color(style.background_colour),
-        );
+            );
+        }
         underlay.rotate(centre, 90.0);
     }
 
     for _ in 0..2 {
         for pair in cross_bar.points.chunks(2) {
             ui.line(
-                Line::new(PlotPoints::from_iter(pair.iter().map(|&p| [p.x, p.y]))).stroke(line),
+                Line::new("", PlotPoints::from_iter(pair.iter().map(|&p| [p.x, p.y]))).stroke(line),
             );
         }
 
         cross_bar.rotate(centre, 90.0);
     }
+    */
 }
 
 fn plot_centreline(ui: &mut PlotUi, style: &Style, centre: Point, size: f64, angle: f64) {
@@ -751,23 +820,36 @@ fn plot_centreline(ui: &mut PlotUi, style: &Style, centre: Point, size: f64, ang
     };
     let mut coords = vec![0.0, 0.05, 0.15, 0.525, 0.625, 0.725, 0.825, 1.2];
     let (ux, uy) = (1.2, style.hatch_padding);
-    let underlay = Path {
-        points: vec![
+
+    // let underlay = build_path_from_points(
+    //     &[
+    //         Point::new(-ux * size, -uy),
+    //         Point::new(-ux * size, uy),
+    //         Point::new(ux * size, uy),
+    //         Point::new(ux * size, -uy),
+    //     ],
+    //     true,
+    // );
+    // if let Some(poly) = render_component_as_polygon(&underlay) {
+    //     ui.polygon(
+    //         poly.stroke(Stroke {
+    //             width: 0.0,
+    //             color: style.background_colour,
+    //         })
+    //         .fill_color(style.background_colour),
+    //     );
+    // }
+
+    let mut underlay = RedprintComponent::builder("underlay")
+        .add_rect_3(
             Point::new(-ux * size, -uy),
             Point::new(-ux * size, uy),
             Point::new(ux * size, uy),
-            Point::new(ux * size, -uy),
-        ],
-    };
-    ui.polygon(
-        underlay
-            .to_poly()
-            .stroke(Stroke {
-                width: 0.0,
-                color: style.background_colour,
-            })
-            .fill_color(style.background_colour),
-    );
+        )
+        .build();
+    underlay.set_stroke_width(0.0);
+    underlay.set_fill_colour([255, 255, 255, 255]); // TODO: make this background colour
+    render_component(ui, &underlay, None, None);
 
     for coord in coords.iter_mut() {
         *coord *= size;
@@ -776,7 +858,8 @@ fn plot_centreline(ui: &mut PlotUi, style: &Style, centre: Point, size: f64, ang
     for _ in 0..2 {
         for chunk in coords.chunks_exact(2) {
             ui.line(
-                Line::new(PlotPoints::from(vec![[chunk[0], 0.0], [chunk[1], 0.0]])).stroke(line),
+                Line::new("", PlotPoints::from(vec![[chunk[0], 0.0], [chunk[1], 0.0]]))
+                    .stroke(line),
             );
         }
 
@@ -786,36 +869,50 @@ fn plot_centreline(ui: &mut PlotUi, style: &Style, centre: Point, size: f64, ang
     }
 }
 
-fn plot_diameter_symbol(ui: &mut PlotUi, line: Stroke, centre: Point) {
+fn plot_diameter_symbol(plot_ui: &mut PlotUi, line: Stroke, centre: Point) {
     let diameter = 3.0;
     let bar_length = 5.5;
-    let mut bar = Path {
-        points: vec![
-            Point::new(0.0, -0.5 * bar_length),
-            Point::new(0.0, 0.5 * bar_length),
-        ],
-    };
-    bar.translate(centre.x, centre.y);
-    bar.rotate(centre, -30.0);
-    ui.polygon(
-        Circle::new(centre, diameter / 2.0)
-            .to_poly()
-            .stroke(line)
-            .fill_color(Color32::TRANSPARENT),
-    );
-    ui.line(bar.to_line().stroke(line));
+    // Just draw the circle for now, skip the diagonal bar
+    // let circle = Circle::new(centre, diameter / 2.0);
+    // if let Some(poly) = render_circle(&circle, 100) {
+    //     ui.polygon(poly.stroke(line).fill_color(Color32::TRANSPARENT));
+    // }
+
+    let symbol = RedprintComponent::builder("diameter_symbol")
+        .add_circle(centre, diameter / 2.0)
+        .add_path()
+        .point(
+            centre.transformed(
+                Transform::translation(bar_length / 2.0, 0.0)
+                    .then(Transform::rotation_around(centre, PI / 6.0)),
+            ),
+        )
+        .point(
+            centre.transformed(
+                Transform::translation(-bar_length / 2.0, 0.0)
+                    .then(Transform::rotation_around(centre, PI / 6.0)),
+            ),
+        )
+        .build();
+
+    render_component(plot_ui, &symbol, None, None);
+    // TODO: redprint missing - Need to draw the diagonal bar line with rotation
+    // Would need to apply Transform::rotation to bar points before building component
 }
 
-fn plot_arrow_leader(ui: &mut PlotUi, line: Stroke, mut tip: Point, knee: Point, end: Point) {
+fn plot_arrow_leader(plot_ui: &mut PlotUi, line: Stroke, tip: Point, knee: Point, end: Point) {
     let angle = (knee.y - tip.y).atan2(knee.x - tip.x) * (180.0 / std::f64::consts::PI);
-    ui.polygon(arrow_head(line.color, tip, angle));
-    tip.vector_offset(angle, 0.5); // This is to stop the square line blunting the arrow tip
-    ui.line(
-        Line::new(PlotPoints::new(vec![
-            tip.to_array(),
-            knee.to_array(),
-            end.to_array(),
-        ]))
+    if let Some(head) = arrow_head(line.color, tip, angle) {
+        plot_ui.polygon(head);
+    }
+    // Offset tip slightly to avoid line blunting arrow (arrow_head returns None currently)
+    let angle_rad = angle.to_radians();
+    let tip = Point::new(tip.x + 0.5 * angle_rad.cos(), tip.y + 0.5 * angle_rad.sin());
+    plot_ui.line(
+        Line::new(
+            "",
+            PlotPoints::new(vec![tip.to_array(), knee.to_array(), end.to_array()]),
+        )
         .stroke(line),
     );
 }

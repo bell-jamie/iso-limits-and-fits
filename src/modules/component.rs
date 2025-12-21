@@ -1,11 +1,8 @@
-use std::collections::BTreeSet;
-
 use super::{
     feature::Feature,
-    material::Material,
-    utils::{lerp_untimed, State},
+    utils::{State, lerp_untimed},
 };
-use egui::{Frame, Id, RichText, SelectableLabel, Ui};
+use egui::Ui;
 
 #[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum Focus {
@@ -19,7 +16,7 @@ pub struct Component {
     pub name: String,
     pub inner_diameter: Feature,
     pub outer_diameter: Feature,
-    pub mat: Material,
+    pub material_id: usize,
     pub focus: Focus,
 }
 
@@ -29,7 +26,7 @@ impl Component {
             name: "Hub".to_owned(),
             inner_diameter: Feature::default_hole(),
             outer_diameter: Feature::default_outer(),
-            mat: Material::pb104(),
+            material_id: 1, // PB104 (index 1 in default material_list)
             focus: Focus::Inner,
         }
     }
@@ -39,7 +36,7 @@ impl Component {
             name: "Shaft".to_owned(),
             inner_diameter: Feature::default_inner(),
             outer_diameter: Feature::default_shaft(),
-            mat: Material::steel4340(),
+            material_id: 0, // Steel 4340 (index 0 in default material_list)
             focus: Focus::Outer,
         }
     }
@@ -53,119 +50,33 @@ impl Component {
         }
     }
 
-    pub fn show(&mut self, ui: &mut Ui, state: &mut State, materials: &mut BTreeSet<Material>) {
-        Frame::group(ui.style())
-            .inner_margin(10.0)
-            .rounding(10.0)
-            .show(ui, |ui| {
-                ui.vertical(|ui| {
-                    ui.horizontal(|ui| {
-                        // This section calculates the required padding for the separator
-                        let total_width = 230.0;
-                        let enum_width = 56.0 + 8.0 + 47.0 + 8.0 + 47.0;
-                        ui.label(RichText::new(&self.name).strong().size(15.0));
-                        let title_width = ui.min_rect().width();
-                        let separator_padding_width =
-                            (total_width - title_width - enum_width - 1.0) / 2.0;
-                        ui.set_width(total_width - ui.min_rect().width());
+    /// Handle automatic size synchronization
+    pub fn handle_sync(&mut self, state: State) {
+        if state.sync_size {
+            if self.inner_diameter.primary {
+                self.inner_diameter.size = state.synced_size;
+            } else {
+                self.outer_diameter.size = state.synced_size;
+            }
+        }
+    }
 
-                        ui.add_space(separator_padding_width + title_width);
+    /// Handle automatic outer diameter scaling when not enabled
+    pub fn handle_auto_scale(&mut self, ui: &Ui) {
+        if !self.outer_diameter.enabled {
+            let target = (1.8 * self.inner_diameter.size).max(1.0);
 
-                        ui.separator();
+            if self.outer_diameter.size != target {
+                let rate = 0.1;
+                let tolerance = (0.005 * self.inner_diameter.size).max(0.01);
 
-                        ui.add_space(separator_padding_width);
-
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            if ui
-                                .add_enabled(state.advanced, |ui: &mut Ui| {
-                                    ui.add_sized(
-                                        [56.0, 18.0],
-                                        SelectableLabel::new(
-                                            self.focus == Focus::Material,
-                                            "Material",
-                                        ),
-                                    )
-                                })
-                                .on_hover_text("Material properties")
-                                .clicked()
-                            {
-                                self.focus = Focus::Material;
-                            }
-                            if ui
-                                .add_enabled(state.advanced, |ui: &mut Ui| {
-                                    ui.add_sized(
-                                        [47.0, 18.0],
-                                        SelectableLabel::new(self.focus == Focus::Outer, "Outer"),
-                                    )
-                                })
-                                .clicked()
-                            {
-                                self.focus = Focus::Outer;
-                            }
-
-                            if ui
-                                .add_enabled(state.advanced, |ui: &mut Ui| {
-                                    ui.add_sized(
-                                        [47.0, 18.0],
-                                        SelectableLabel::new(self.focus == Focus::Inner, "Inner"),
-                                    )
-                                })
-                                .on_hover_text("Inner surface")
-                                .clicked()
-                            {
-                                self.focus = Focus::Inner;
-                            }
-                        });
-
-                        // check_width(ui);
-                    });
-
-                    if !state.advanced {
-                        self.focus = if self.inner_diameter.primary {
-                            Focus::Inner
-                        } else {
-                            Focus::Outer
-                        };
-                    }
-
-                    match self.focus {
-                        Focus::Inner => {
-                            self.inner_diameter
-                                .show(ui, state, &self.name, &self.outer_diameter)
-                        }
-                        Focus::Outer => {
-                            self.outer_diameter
-                                .show(ui, state, &self.name, &self.inner_diameter)
-                        }
-                        Focus::Material => self.mat.input(ui, materials, &self.name),
-                    }
-
-                    if state.sync_size {
-                        if self.inner_diameter.primary {
-                            self.inner_diameter.size = state.synced_size;
-                        } else {
-                            self.outer_diameter.size = state.synced_size;
-                        }
-                    }
-
-                    // Automatic (smooth) scaling based on enabled feature
-                    if !self.outer_diameter.enabled {
-                        let target = (1.8 * self.inner_diameter.size).max(1.0);
-
-                        if self.outer_diameter.size != target {
-                            let rate = 0.1;
-                            let tolerance = (0.005 * self.inner_diameter.size).max(0.01);
-
-                            if let Some(size) =
-                                lerp_untimed(self.outer_diameter.size, target, rate, tolerance)
-                            {
-                                self.outer_diameter.size = size;
-                                ui.ctx().request_repaint();
-                            }
-                        }
-                    }
-                });
-            });
+                if let Some(size) = lerp_untimed(self.outer_diameter.size, target, rate, tolerance)
+                {
+                    self.outer_diameter.size = size;
+                    ui.ctx().request_repaint();
+                }
+            }
+        }
     }
 
     // pub fn view(&self, ui: &mut Ui) {

@@ -1,11 +1,11 @@
-use egui::{emath::vec2, Button, Color32, DragValue, Frame, Modal, Slider, Ui};
+use egui::{Button, Color32, DragValue, Frame, Modal, Slider, Ui, emath::vec2};
 use std::{cmp::Ordering, collections::BTreeSet};
 
 use super::{
     component::Component,
     fit::Fit,
     plot,
-    utils::{self, dynamic_precision, State},
+    utils::{self, State, dynamic_precision},
 };
 
 #[derive(Clone, serde::Deserialize, serde::Serialize)]
@@ -119,53 +119,46 @@ impl Material {
             materials.insert(self.clone());
         }
 
-        // Open popup when the name input is focused
-        if name_input.has_focus() && !ui.memory(|mem| mem.is_popup_open(id)) {
-            ui.memory_mut(|mem| mem.open_popup(id));
+        // Material selection (simplified without popup for now)
+        // TODO: Re-implement popup when egui API is stable
+        if false {
+            #[allow(unreachable_code)]
+            egui::ScrollArea::vertical()
+                .min_scrolled_height(100.0)
+                .show(ui, |ui| {
+                    // ui.set_min_height(60.0);
+                    let mut to_remove = None;
+
+                    for material in materials.iter() {
+                        let (delete_button, material_listing) = ui
+                            .horizontal(|ui| {
+                                (
+                                    ui.add(Button::new("🗑")),
+                                    ui.add(
+                                        // [material_name_input_width, 18.0],
+                                        Button::new(material.name.clone()),
+                                    ),
+                                )
+                            })
+                            .inner;
+
+                        if material_listing.clicked() {
+                            *self = material.clone();
+                            // TODO: Fix popup closing with correct popup_id
+                            // ui.memory_mut(|mem| mem.close_popup(popup_id));
+                        }
+
+                        if delete_button.clicked() {
+                            to_remove = Some(material.clone());
+                        }
+                    }
+
+                    // Material has to be deleted outside iter method
+                    if let Some(material) = to_remove {
+                        materials.remove(&material);
+                    }
+                });
         }
-
-        egui::popup::popup_below_widget(
-            ui,
-            id,
-            &name_input,
-            egui::containers::popup::PopupCloseBehavior::CloseOnClickOutside,
-            |ui| {
-                egui::ScrollArea::vertical()
-                    .min_scrolled_height(100.0)
-                    .show(ui, |ui| {
-                        // ui.set_min_height(60.0);
-                        let mut to_remove = None;
-
-                        for material in materials.iter() {
-                            let (delete_button, material_listing) = ui
-                                .horizontal(|ui| {
-                                    (
-                                        ui.add(Button::new("🗑")),
-                                        ui.add(
-                                            // [material_name_input_width, 18.0],
-                                            Button::new(material.name.clone()),
-                                        ),
-                                    )
-                                })
-                                .inner;
-
-                            if material_listing.clicked() {
-                                *self = material.clone();
-                                ui.memory_mut(|mem| mem.close_popup()); // close when selected
-                            }
-
-                            if delete_button.clicked() {
-                                to_remove = Some(material.clone());
-                            }
-                        }
-
-                        // Material has to be deleted outside iter method
-                        if let Some(material) = to_remove {
-                            materials.remove(&material);
-                        }
-                    })
-            },
-        );
 
         egui::Grid::new(id).striped(false).show(ui, |ui| {
             ui.label("Youngs");
@@ -291,12 +284,27 @@ impl Material {
     }
 }
 
-pub fn temperature_input(
+// TODO: Update to use material_id lookup when thermal is re-enabled
+#[allow(dead_code)]
+fn _temperature_input(
+    _ui: &mut Ui,
+    _state: &mut State,
+    _left_component: &mut Component,
+    _right_component: &mut Component,
+) {
+    unimplemented!("Needs update to use material_id");
+}
+
+#[allow(dead_code)]
+fn _temperature_input_old(
     ui: &mut Ui,
     state: &mut State,
     left_component: &mut Component,
     right_component: &mut Component,
 ) {
+    // This function needs to be updated to use material_id instead of mat
+    let _ = (ui, state, left_component, right_component);
+    /*
     Frame::group(ui.style())
         .inner_margin(10.0)
         .rounding(10.0)
@@ -435,9 +443,18 @@ pub fn temperature_input(
                 // ui.label(format!("{width_text}"));
             })
         });
+    */
 }
 
-pub fn temperature_output(ui: &mut Ui, state: &mut State, hub: &Component, shaft: &Component) {
+#[allow(dead_code)]
+fn _temperature_output(_ui: &mut Ui, _state: &mut State, _hub: &Component, _shaft: &Component) {
+    unimplemented!("Needs update to use material_id");
+}
+
+#[allow(dead_code)]
+fn _temperature_output_old(ui: &mut Ui, state: &mut State, hub: &Component, shaft: &Component) {
+    let _ = (ui, state, hub, shaft);
+    /*
     Frame::group(ui.style())
         .inner_margin(10.0)
         .rounding(10.0)
@@ -456,4 +473,5 @@ pub fn temperature_output(ui: &mut Ui, state: &mut State, hub: &Component, shaft
                 plot::fit_temp_graph(ui, state, hub, shaft);
             })
         });
+    */
 }

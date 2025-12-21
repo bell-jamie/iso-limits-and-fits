@@ -1,26 +1,29 @@
 use crate::modules::{
-    component::Component, fit::Fit, mat_data::material_list, material, material::Material, plot,
-    utils::State,
+    cards::CardGrid, component::Component, fit::Fit, mat_data::material_list, material,
+    material::Material, plot, theme, utils::State,
 };
-use egui::{Button, Color32, CursorIcon, RichText};
-use std::collections::BTreeSet;
+use egui::{Button, Color32, CursorIcon, RichText, Ui};
 
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)]
 pub struct LimitsFitsApp {
-    hub: Component,
-    shaft: Component,
-    state: State,
-    materials: BTreeSet<Material>,
+    pub hub_id: usize,
+    pub shaft_id: usize,
+    pub state: State,
+    pub material_library: Vec<Material>,
+    pub hub_library: Vec<Component>,
+    pub shaft_library: Vec<Component>,
 }
 
 impl Default for LimitsFitsApp {
     fn default() -> Self {
         Self {
-            hub: Component::default_hub(),
-            shaft: Component::default_shaft(),
+            hub_id: 0,
+            shaft_id: 0,
             state: State::default(),
-            materials: material_list(),
+            material_library: material_list().into_iter().collect(),
+            hub_library: vec![Component::default_hub()],
+            shaft_library: vec![Component::default_shaft()],
         }
     }
 }
@@ -28,8 +31,7 @@ impl Default for LimitsFitsApp {
 impl LimitsFitsApp {
     /// Called once before the first frame.
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        // This is also where you can customize the look and feel of egui using
-        // `cc.egui_ctx.set_visuals` and `cc.egui_ctx.set_fonts`.
+        theme::install(&cc.egui_ctx);
 
         // Load previous app state (if any).
         // Note that you must enable the `persistence` feature for this to work.
@@ -38,6 +40,159 @@ impl LimitsFitsApp {
         }
 
         Default::default()
+    }
+
+    fn show_status_bar(&mut self, ui: &mut egui::Ui) {
+        egui::Frame::new()
+            .inner_margin(egui::Margin::symmetric(8, 4))
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    let release_colour = Color32::from_rgb(0, 169, 0);
+
+                    // Left section - signature
+                    ui.spacing_mut().item_spacing.x = 0.0;
+                    ui.label("Created by ");
+                    ui.hyperlink_to("James Bell", "https://www.linkedin.com/in/bell-jamie/");
+                    ui.label(".");
+
+                    // Right section - version info
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        ui.spacing_mut().item_spacing.x = 0.0;
+
+                        if ui.colored_label(release_colour, " alpha")
+                            .on_hover_cursor(egui::CursorIcon::Help)
+                            .on_hover_text("This is an alpha release, bugs are to be expected — check your work (like Soroush does).\nClick to enable debug mode.")
+                            .clicked() { self.state.debug = !self.state.debug; }
+
+                        ui.add_space(5.0);
+
+                        ui.label(env!("CARGO_PKG_VERSION"))
+                            .on_hover_cursor(egui::CursorIcon::Help)
+                            .on_hover_text(format_changelog(CHANGELOG_ENTRIES));
+                        ui.label(" v");
+
+                        if self.state.debug {
+                            ui.add_space(5.0);
+                            if ui.ctx().has_requested_repaint() {
+                                ui.colored_label(Color32::RED, "Repainting...");
+                            }
+                        }
+                    });
+                });
+            });
+    }
+
+    fn show_central_content(&mut self, ui: &mut Ui) {
+        let card_grid = CardGrid::default();
+
+        ui.horizontal(|ui| {
+            ui.heading(RichText::new("[PFS]").strong());
+            ui.heading("|");
+            ui.heading("Precision Fit Studio");
+        });
+
+        ui.add_space(ui.style().spacing.window_margin.bottomf());
+
+        egui::ScrollArea::both()
+            .auto_shrink([false, false])
+            .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden)
+            .show(ui, |ui| {
+                card_grid.render_cards(self, ui);
+            });
+    }
+
+    fn show_menu_bar(&mut self, ui: &mut Ui) {
+        egui::MenuBar::new().ui(ui, |ui| {
+            egui::widgets::global_theme_preference_switch(ui);
+            self.state.zoom.show(ui);
+
+            // ui.separator();
+
+            // ui.toggle_value(&mut self.state.advanced, "Advanced");
+            if ui
+                .add(Button::selectable(self.state.advanced, "Advanced").frame_when_inactive(true))
+                .clicked()
+            {
+                self.state.advanced = !self.state.advanced;
+            }
+
+            // ui.toggle_value(&mut self.state.thermal, "Thermal");
+            // ui.toggle_value(&mut self.state.interference, "Inteference");
+
+            // ui.button("Stress").on_hover_text("Add me");
+
+            if ui
+                .add(Button::new("Reset").frame_when_inactive(true))
+                .clicked()
+            {
+                self.hub_id = 0;
+                self.shaft_id = 0;
+                self.state = State::default();
+                self.material_library = material_list().into_iter().collect();
+                self.hub_library = vec![Component::default_hub()];
+                self.shaft_library = vec![Component::default_shaft()];
+            }
+
+            if self.state.debug {
+                ui.separator();
+
+                ui.label(RichText::new("DEBUG").strong().color(Color32::RED))
+                    .on_hover_cursor(CursorIcon::default());
+
+                ui.toggle_value(&mut self.state.force_valid, "Force Valid");
+
+                // if ui.add(Button::new("Random")).clicked() {
+                //     self.state.sync_size = false;
+                //     self.hole = Feature::random(true, self.state.force_valid);
+                //     self.shaft = Feature::random(false, self.state.force_valid);
+                //     self.fit = Fit::new(&self.hole, &self.shaft);
+                // }
+            }
+        });
+    }
+
+    pub fn get_hub_name(&self) -> Option<&str> {
+        self.hub_library
+            .get(self.state.hub_id)
+            .map(|hub| hub.name.as_str())
+    }
+
+    pub fn get_hub_name_mut(&mut self) -> Option<&mut String> {
+        if let Some(hub) = self.get_hub_mut() {
+            Some(&mut hub.name)
+        } else {
+            None
+        }
+    }
+
+    pub fn get_shaft_name(&self) -> Option<&str> {
+        self.shaft_library
+            .get(self.state.shaft_id)
+            .map(|shaft| shaft.name.as_str())
+    }
+
+    pub fn get_hub(&self) -> Option<&Component> {
+        self.hub_library.get(self.hub_id)
+    }
+
+    pub fn get_shaft(&self) -> Option<&Component> {
+        self.shaft_library.get(self.shaft_id)
+    }
+
+    pub fn get_hub_mut(&mut self) -> Option<&mut Component> {
+        self.hub_library.get_mut(self.hub_id)
+    }
+
+    pub fn get_shaft_mut(&mut self) -> Option<&mut Component> {
+        self.shaft_library.get_mut(self.shaft_id)
+    }
+
+    pub fn get_material(&self, id: usize) -> Option<&Material> {
+        self.material_library.get(id)
+    }
+
+    pub fn get_material_mut(&mut self, id: usize) -> Option<&mut Material> {
+        self.material_library.get_mut(id)
     }
 }
 
@@ -52,97 +207,65 @@ impl eframe::App for LimitsFitsApp {
         // Put your widgets into a `SidePanel`, `TopBottomPanel`, `CentralPanel`, `Window` or `Area`.
         // For inspiration and more examples, go to https://emilk.github.io/egui
 
-        egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
-            // The top panel is often a good place for a menu bar:
+        egui::TopBottomPanel::bottom("status_bar").show(ctx, |ui| {
+            self.show_status_bar(ui);
+        });
 
-            egui::menu::bar(ui, |ui| {
-                egui::widgets::global_theme_preference_switch(ui);
-                self.state.zoom.show(ui, ctx);
-
-                // ui.separator();
-
-                ui.toggle_value(&mut self.state.advanced, "Advanced");
-                // ui.toggle_value(&mut self.state.thermal, "Thermal");
-                // ui.toggle_value(&mut self.state.interference, "Inteference");
-
-                // ui.button("Stress").on_hover_text("Add me");
-
-                if ui.add(Button::new("Reset")).clicked() {
-                    self.hub = Component::default_hub();
-                    self.shaft = Component::default_shaft();
-                    self.state = State::default();
-                    self.materials = material_list();
-                }
-
-                if self.state.debug {
-                    ui.separator();
-
-                    ui.label(RichText::new("DEBUG").strong().color(Color32::RED))
-                        .on_hover_cursor(CursorIcon::default());
-
-                    ui.toggle_value(&mut self.state.force_valid, "Force Valid");
-
-                    // if ui.add(Button::new("Random")).clicked() {
-                    //     self.state.sync_size = false;
-                    //     self.hole = Feature::random(true, self.state.force_valid);
-                    //     self.shaft = Feature::random(false, self.state.force_valid);
-                    //     self.fit = Fit::new(&self.hole, &self.shaft);
-                    // }
-                }
-            });
+        egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
+            self.show_menu_bar(ui);
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.add_space(5.0);
+            self.show_central_content(ui);
 
-            ui.horizontal(|ui| {
-                ui.heading(RichText::new("[PFS]").strong());
-                ui.heading("|");
-                ui.heading("Precision Fit Studio");
-            });
+            // ui.add_space(5.0);
 
-            // Maybe the material feature button shouldn't be part of the enum and instead should be a toggle?
-            // This would mean that it could keep displaying the info
-            // Orrr maybe just all the information gets spat out at the end in a spreadsheet style thing
+            // ui.horizontal(|ui| {
+            //     ui.heading(RichText::new("[PFS]").strong());
+            //     ui.heading("|");
+            //     ui.heading("Precision Fit Studio");
+            // });
 
-            ui.add_space(10.0);
+            // // Maybe the material feature button shouldn't be part of the enum and instead should be a toggle?
+            // // This would mean that it could keep displaying the info
+            // // Orrr maybe just all the information gets spat out at the end in a spreadsheet style thing
 
-            if self.state.advanced {
-                ui.horizontal(|ui| {
-                    self.hub.show(ui, &mut self.state, &mut self.materials);
+            // ui.add_space(10.0);
 
-                    ui.add_space(10.0);
+            // if self.state.advanced {
+            //     ui.horizontal(|ui| {
+            //         self.hub.show(ui, &mut self.state, &mut self.materials);
 
-                    self.shaft.show(ui, &mut self.state, &mut self.materials);
-                });
+            //         ui.add_space(10.0);
 
-                ui.add_space(10.0);
+            //         self.shaft.show(ui, &mut self.state, &mut self.materials);
+            //     });
 
-                plot::side_by_side(ui, &self.state, &self.hub, &self.shaft);
+            //     ui.add_space(10.0);
 
-                ui.add_space(10.0);
+            //     plot::side_by_side(ui, &self.state, &self.hub, &self.shaft);
 
-                material::temperature_input(ui, &mut self.state, &mut self.hub, &mut self.shaft);
+            //     ui.add_space(10.0);
 
-                ui.add_space(10.0);
+            //     material::temperature_input(ui, &mut self.state, &mut self.hub, &mut self.shaft);
 
-                material::temperature_output(ui, &mut self.state, &self.hub, &self.shaft);
-            } else {
-                // Simple mode
-                self.hub.show(ui, &mut self.state, &mut self.materials);
+            //     ui.add_space(10.0);
 
-                ui.add_space(10.0);
+            //     material::temperature_output(ui, &mut self.state, &self.hub, &self.shaft);
+            // } else {
+            //     // Simple mode
+            //     self.hub.show(ui, &mut self.state, &mut self.materials);
 
-                self.shaft.show(ui, &mut self.state, &mut self.materials);
+            //     ui.add_space(10.0);
 
-                ui.add_space(10.0);
+            //     self.shaft.show(ui, &mut self.state, &mut self.materials);
 
-                let fit = Fit::new(&self.hub, &self.shaft);
-                fit.show(ui, &self.state);
-            }
+            //     ui.add_space(10.0);
+
+            //     let fit = Fit::new(&self.hub, &self.shaft);
+            //     fit.show(ui, &self.state);
 
             ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
-                signature(self, ui);
                 egui::warn_if_debug_build(ui);
             });
         });
@@ -226,37 +349,4 @@ fn format_changelog(entries: &[ChangelogEntry]) -> String {
     changelog.pop();
     changelog.pop();
     changelog
-}
-
-fn signature(app: &mut LimitsFitsApp, ui: &mut egui::Ui) {
-    ui.horizontal(|ui| {
-        let release_colour = Color32::from_rgb(0, 169, 0);
-        // let version_colour = Color32::from_rgb(169, 0, 0);
-
-        ui.spacing_mut().item_spacing.x = 0.0;
-        ui.label("Powered by ");
-        ui.hyperlink_to("egui", "https://github.com/emilk/egui");
-        ui.label(" and ");
-        ui.hyperlink_to(
-            "eframe",
-            "https://github.com/emilk/egui/tree/master/crates/eframe",
-        );
-        ui.label(". Created by ");
-        ui.hyperlink_to("James Bell", "https://www.linkedin.com/in/bell-jamie/");
-        ui.label(".");
-        ui.label(" v");
-        ui.label(env!("CARGO_PKG_VERSION"))
-            .on_hover_cursor(egui::CursorIcon::Help)
-            .on_hover_text(format_changelog(CHANGELOG_ENTRIES));
-        if ui.colored_label(release_colour, " alpha")
-            .on_hover_cursor(egui::CursorIcon::Help)
-            .on_hover_text("This is an alpha release, bugs are to be expected — check your work (like Soroush does).\nClick to enable debug mode.")
-            .clicked() { app.state.debug = !app.state.debug; }
-        if app.state.debug {
-            ui.add_space(5.0);
-            if ui.ctx().has_requested_repaint() {
-                ui.colored_label(Color32::RED, "Repainting...");
-            }
-        }
-    });
 }

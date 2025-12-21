@@ -1,4 +1,4 @@
-use egui::{emath, Context, RichText, Ui, Vec2};
+use egui::{Context, RichText, Ui, Vec2, emath};
 
 #[derive(Clone, serde::Deserialize, serde::Serialize)]
 pub struct State {
@@ -12,6 +12,8 @@ pub struct State {
     pub thermal: bool,
     pub interference: bool,
     pub zoom: Zoom,
+    pub hub_id: usize,
+    pub shaft_id: usize,
 }
 
 impl State {
@@ -27,6 +29,8 @@ impl State {
             thermal: false,
             interference: false,
             zoom: Zoom::default(),
+            hub_id: 0,
+            shaft_id: 0,
         }
     }
 }
@@ -41,11 +45,11 @@ impl Zoom {
     pub fn default() -> Self {
         Zoom {
             expand: false,
-            scale: 1.0,
+            scale: 1.7,
         }
     }
 
-    pub fn show(&mut self, ui: &mut Ui, ctx: &Context) {
+    pub fn show(&mut self, ui: &mut Ui) {
         ui.toggle_value(&mut self.expand, "🔍")
             .on_hover_text("Zoom");
 
@@ -79,7 +83,7 @@ impl Zoom {
         // });
 
         self.scale = self.scale.clamp(min_zoom, max_zoom);
-        ctx.set_zoom_factor(self.scale);
+        ui.ctx().set_zoom_factor(self.scale);
     }
 }
 
@@ -129,18 +133,12 @@ pub fn req_precision(value: f64, decimals: isize) -> usize {
 
 pub fn text_width(ctx: &Context, text: &str, size: f32) -> Vec2 {
     // Returns the x and y size of the text
-    ctx.fonts(|f| {
-        f.layout_no_wrap(
-            text.to_string(),
-            {
-                let mut default = egui::FontId::default();
-                default.size = size;
-                default
-            },
-            egui::Color32::WHITE,
-        )
-    })
-    .size()
+    let font_id = egui::FontId {
+        size,
+        ..Default::default()
+    };
+    ctx.fonts_mut(|f| f.layout_no_wrap(text.to_string(), font_id.clone(), egui::Color32::WHITE))
+        .size()
 }
 
 /// This function is framerate dependant.
