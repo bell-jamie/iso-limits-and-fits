@@ -1,91 +1,4 @@
-use egui::{Context, RichText, Ui, Vec2, emath};
-
-#[derive(Clone, serde::Deserialize, serde::Serialize)]
-pub struct State {
-    pub advanced: bool,
-    pub debug: bool,
-    pub force_valid: bool,
-    pub sync_size: bool,
-    pub synced_size: f64,
-    pub sync_temp: bool,
-    pub synced_temp: f64,
-    pub thermal: bool,
-    pub interference: bool,
-    pub zoom: Zoom,
-    pub hub_id: usize,
-    pub shaft_id: usize,
-}
-
-impl State {
-    pub fn default() -> Self {
-        State {
-            advanced: false,
-            debug: false,
-            force_valid: false,
-            sync_size: true,
-            synced_size: 10.0,
-            sync_temp: true,
-            synced_temp: 20.0,
-            thermal: false,
-            interference: false,
-            zoom: Zoom::default(),
-            hub_id: 0,
-            shaft_id: 0,
-        }
-    }
-}
-
-#[derive(Clone, serde::Deserialize, serde::Serialize)]
-pub struct Zoom {
-    pub expand: bool,
-    pub scale: f32,
-}
-
-impl Zoom {
-    pub fn default() -> Self {
-        Zoom {
-            expand: false,
-            scale: 1.7,
-        }
-    }
-
-    pub fn show(&mut self, ui: &mut Ui) {
-        ui.toggle_value(&mut self.expand, "🔍")
-            .on_hover_text("Zoom");
-
-        let (min_zoom, max_zoom) = (0.5, 3.0);
-
-        // Handles the ui zoom slider
-        if self.expand {
-            ui.label(format!("{:.1}x", self.scale));
-
-            if ui
-                .add(egui::Slider::new(&mut self.scale, min_zoom..=max_zoom).show_value(false))
-                .is_pointer_button_down_on()
-            {
-                return;
-            }
-        }
-
-        // Handles the scroll and keyboard inputs - disabled for now
-        // ctx.input(|i| {
-        //     if i.modifiers.command {
-        //         if i.raw_scroll_delta.y != 0.0 {
-        //             self.scale += i.raw_scroll_delta.y * 1e-3;
-        //         }
-
-        //         if i.key_pressed(egui::Key::Plus) {
-        //             self.scale += 0.1;
-        //         } else if i.key_pressed(egui::Key::Minus) {
-        //             self.scale -= 0.1;
-        //         }
-        //     }
-        // });
-
-        self.scale = self.scale.clamp(min_zoom, max_zoom);
-        ui.ctx().set_zoom_factor(self.scale);
-    }
-}
+use egui::{Context, RichText, Ui, Vec2};
 
 pub fn decimals(num: f64, decimals: i32) -> f64 {
     // Negative decimals inherit the default decimal places value
@@ -156,11 +69,40 @@ pub fn check_width(ui: &mut Ui) {
         .on_hover_text(format!("{width}"));
 }
 
-// pub fn linspace(a: f64, b: f64, n: usize) -> Vec<f64> {
-//     (0..n)
-//         .map(|i| {
-//             let t = i as f64 / (n as f64 - 1.0);
-//             a + t * (b - a)
-//         })
-//         .collect()
-// }
+/// Custom accordion widget with title on left and toggle icon on right
+/// Collapsed: Title            -
+/// Extended:  Title            v
+pub fn accordion<R>(
+    ui: &mut Ui,
+    id: impl std::hash::Hash,
+    title: impl Into<String>,
+    default_open: bool,
+    add_contents: impl FnOnce(&mut Ui) -> R,
+) -> Option<R> {
+    let id = ui.make_persistent_id(id);
+    let mut open = ui
+        .ctx()
+        .data_mut(|d| *d.get_persisted_mut_or(id, default_open));
+
+    let title = title.into();
+    let icon = if open { "⏷" } else { "⏴" };
+
+    let available_width = ui.available_width();
+    let height = ui.spacing().interact_size.y;
+
+    ui.allocate_ui_with_layout(
+        egui::vec2(available_width, height),
+        egui::Layout::left_to_right(egui::Align::Center),
+        |ui| {
+            ui.label(RichText::new(&title).strong());
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui.add(egui::Button::new(icon).frame(false)).clicked() {
+                    open = !open;
+                    ui.ctx().data_mut(|d| d.insert_persisted(id, open));
+                }
+            });
+        },
+    );
+
+    if open { Some(add_contents(ui)) } else { None }
+}

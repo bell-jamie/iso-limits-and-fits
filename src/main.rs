@@ -18,9 +18,9 @@ fn main() -> eframe::Result {
         ..Default::default()
     };
     eframe::run_native(
-        "ISO Limits and Fits Tool",
+        "Precision Fit Studio",
         native_options,
-        Box::new(|cc| Ok(Box::new(iso_limits_and_fits::LimitsFitsApp::new(cc)))),
+        Box::new(|cc| Ok(Box::new(precision_fit_studio::Studio::new(cc)))),
     )
 }
 
@@ -50,7 +50,7 @@ fn main() {
             .start(
                 canvas,
                 web_options,
-                Box::new(|cc| Ok(Box::new(iso_limits_and_fits::LimitsFitsApp::new(cc)))),
+                Box::new(|cc| Ok(Box::new(precision_fit_studio::Studio::new(cc)))),
             )
             .await;
 

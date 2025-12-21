@@ -7,7 +7,8 @@ use serde::Deserialize;
 use super::{
     component::Component,
     feature::Feature,
-    utils::{State, dynamic_precision, text_width},
+    state::State,
+    utils::{dynamic_precision, text_width},
 };
 
 use redprint::core::transform::Transform;

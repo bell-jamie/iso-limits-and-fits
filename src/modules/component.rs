@@ -1,7 +1,4 @@
-use super::{
-    feature::Feature,
-    utils::{State, lerp_untimed},
-};
+use super::{feature::Feature, state::State, utils::lerp_untimed};
 use egui::Ui;
 
 #[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]

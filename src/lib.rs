@@ -2,4 +2,4 @@
 
 mod app;
 mod modules;
-pub use app::LimitsFitsApp;
+pub use app::Studio;

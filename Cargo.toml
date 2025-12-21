@@ -1,5 +1,5 @@
 [package]
-name = "iso_limits_and_fits"
+name = "precision_fit_studio"
 version = "0.7.0-INDEV"
 authors = ["James Bell <jmhbell@icloud.com>"]
 edition = "2024"

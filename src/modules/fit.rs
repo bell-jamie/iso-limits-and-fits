@@ -1,9 +1,6 @@
 use egui::{Grid, RichText, Ui};
 
-use super::{
-    component::Component,
-    utils::{State, decimals},
-};
+use super::{component::Component, state::State, utils::decimals};
 
 #[derive(serde::Deserialize, serde::Serialize)]
 pub struct Fit {

@@ -1,26 +1,26 @@
 use crate::modules::{
     cards::CardGrid, component::Component, fit::Fit, mat_data::material_list, material,
-    material::Material, plot, theme, utils::State,
+    material::Material, plot, state, theme, utils,
 };
 use egui::{Button, Color32, CursorIcon, RichText, Ui};
 
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)]
-pub struct LimitsFitsApp {
+pub struct Studio {
     pub hub_id: usize,
     pub shaft_id: usize,
-    pub state: State,
+    pub state: state::State,
     pub material_library: Vec<Material>,
     pub hub_library: Vec<Component>,
     pub shaft_library: Vec<Component>,
 }
 
-impl Default for LimitsFitsApp {
+impl Default for Studio {
     fn default() -> Self {
         Self {
             hub_id: 0,
             shaft_id: 0,
-            state: State::default(),
+            state: state::State::default(),
             material_library: material_list().into_iter().collect(),
             hub_library: vec![Component::default_hub()],
             shaft_library: vec![Component::default_shaft()],
@@ -28,7 +28,7 @@ impl Default for LimitsFitsApp {
     }
 }
 
-impl LimitsFitsApp {
+impl Studio {
     /// Called once before the first frame.
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         theme::install(&cc.egui_ctx);
@@ -82,13 +82,30 @@ impl LimitsFitsApp {
             });
     }
 
+    fn show_library_panel(&mut self, ui: &mut egui::Ui) {
+        ui.add_space(5.0);
+        ui.heading("Library");
+        ui.separator();
+
+        egui::ScrollArea::vertical()
+            .auto_shrink([false, false])
+            .show(ui, |ui| {
+                // Hubs section
+                utils::accordion(ui, "hubs_accordion", "Hubs", false, |ui| {
+                    ui.label("Content of section 1");
+                });
+                ui.label(egui::RichText::new("Bolts").strong());
+                ui.add_space(4.0);
+            });
+    }
+
     fn show_central_content(&mut self, ui: &mut Ui) {
         let card_grid = CardGrid::default();
 
         ui.horizontal(|ui| {
             ui.heading(RichText::new("[PFS]").strong());
-            ui.heading("|");
-            ui.heading("Precision Fit Studio");
+            // ui.heading("|");
+            ui.heading(RichText::new("Precision Fit Studio"));
         });
 
         ui.add_space(ui.style().spacing.window_margin.bottomf());
@@ -127,7 +144,7 @@ impl LimitsFitsApp {
             {
                 self.hub_id = 0;
                 self.shaft_id = 0;
-                self.state = State::default();
+                self.state = state::State::default();
                 self.material_library = material_list().into_iter().collect();
                 self.hub_library = vec![Component::default_hub()];
                 self.shaft_library = vec![Component::default_shaft()];
@@ -171,6 +188,14 @@ impl LimitsFitsApp {
             .map(|shaft| shaft.name.as_str())
     }
 
+    pub fn get_shaft_name_mut(&mut self) -> Option<&mut String> {
+        if let Some(shaft) = self.get_shaft_mut() {
+            Some(&mut shaft.name)
+        } else {
+            None
+        }
+    }
+
     pub fn get_hub(&self) -> Option<&Component> {
         self.hub_library.get(self.hub_id)
     }
@@ -196,7 +221,7 @@ impl LimitsFitsApp {
     }
 }
 
-impl eframe::App for LimitsFitsApp {
+impl eframe::App for Studio {
     /// Called by the frame work to save state before shutdown.
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
         eframe::set_value(storage, eframe::APP_KEY, self);
@@ -206,6 +231,7 @@ impl eframe::App for LimitsFitsApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         // Put your widgets into a `SidePanel`, `TopBottomPanel`, `CentralPanel`, `Window` or `Area`.
         // For inspiration and more examples, go to https://emilk.github.io/egui
+        crate::modules::shortcuts::inputs(ctx, self);
 
         egui::TopBottomPanel::bottom("status_bar").show(ctx, |ui| {
             self.show_status_bar(ui);
@@ -214,6 +240,15 @@ impl eframe::App for LimitsFitsApp {
         egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
             self.show_menu_bar(ui);
         });
+
+        if self.state.show_library_panel {
+            egui::SidePanel::left("library_panel")
+                .default_width(250.0)
+                .resizable(true)
+                .show(ctx, |ui| {
+                    self.show_library_panel(ui);
+                });
+        }
 
         egui::CentralPanel::default().show(ctx, |ui| {
             self.show_central_content(ui);

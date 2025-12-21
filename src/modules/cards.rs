@@ -1,4 +1,4 @@
-use crate::LimitsFitsApp;
+use crate::Studio;
 use crate::modules::component::Component;
 use crate::modules::component::Focus;
 use crate::modules::utils::decimals;
@@ -20,7 +20,7 @@ impl Default for CardGrid {
 }
 
 impl CardGrid {
-    fn hub_input(&self, app: &mut LimitsFitsApp, ui: &mut Ui) {
+    fn hub_input(&self, app: &mut Studio, ui: &mut Ui) {
         let name = app.get_hub_name().unwrap_or("Hub").to_string();
         let advanced = app.state.advanced;
 
@@ -55,7 +55,7 @@ impl CardGrid {
             ui.horizontal(|ui| {
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                     if let Some(hub) = app.get_hub_mut() {
-                        component_title_bar(ui, hub, advanced);
+                        component_input_title_bar(ui, hub, advanced);
                     }
                     if let Some(name) = app.get_hub_name_mut() {
                         // TODO this will need an "else" clause
@@ -89,7 +89,7 @@ impl CardGrid {
         });
     }
 
-    fn shaft_input(&self, app: &mut LimitsFitsApp, ui: &mut Ui) {
+    fn shaft_input(&self, app: &mut Studio, ui: &mut Ui) {
         let name = app.get_shaft_name().unwrap_or("Shaft").to_string();
         let advanced = app.state.advanced;
 
@@ -122,10 +122,13 @@ impl CardGrid {
             ui.set_width(ui.available_width());
             // Title bar
             ui.horizontal(|ui| {
-                ui.label(&name);
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                     if let Some(shaft) = app.get_shaft_mut() {
-                        component_title_bar(ui, shaft, advanced);
+                        component_input_title_bar(ui, shaft, advanced);
+                    }
+                    if let Some(name) = app.get_shaft_name_mut() {
+                        // TODO this will need an "else" clause
+                        ui.text_edit_singleline(name);
                     }
                 });
             });
@@ -157,7 +160,7 @@ impl CardGrid {
         });
     }
 
-    fn fit_output(&self, app: &mut LimitsFitsApp, ui: &mut Ui) {
+    fn fit_output(&self, app: &mut Studio, ui: &mut Ui) {
         let (hub, shaft) = match (app.get_hub(), app.get_shaft()) {
             (Some(h), Some(s)) => (h, s),
             _ => return,
@@ -268,7 +271,14 @@ impl CardGrid {
         });
     }
 
-    pub fn render_cards(&self, app: &mut LimitsFitsApp, ui: &mut Ui) {
+    fn schematic(&self, app: &mut Studio, ui: &mut Ui) {
+        Frame::group(ui.style()).show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.set_height(ui.available_height());
+        });
+    }
+
+    pub fn render_cards(&self, app: &mut Studio, ui: &mut Ui) {
         ui.horizontal(|ui| {
             ui.vertical(|ui| {
                 ui.set_width(self.card_width);
@@ -278,6 +288,10 @@ impl CardGrid {
                 ui.add_space(self.gap);
                 self.fit_output(app, ui);
             });
+            ui.vertical(|ui| {
+                ui.set_width(self.card_width / 2.0);
+                self.schematic(app, ui);
+            })
             // self.visual // you were working here!
         });
     }
@@ -285,7 +299,7 @@ impl CardGrid {
 
 /// Renders focus buttons for a component title bar.
 /// Called within a right-to-left layout, so buttons are added in reverse order.
-fn component_title_bar(ui: &mut Ui, component: &mut Component, advanced: bool) {
+fn component_input_title_bar(ui: &mut Ui, component: &mut Component, advanced: bool) {
     // Focus buttons in reverse order (right-to-left layout)
     for (focus_val, label) in [
         (Focus::Material, "MATL"),

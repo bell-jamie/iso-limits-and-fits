@@ -5,7 +5,8 @@ use super::{
     component::Component,
     fit::Fit,
     plot,
-    utils::{self, State, dynamic_precision},
+    state::State,
+    utils::{self, dynamic_precision},
 };
 
 #[derive(Clone, serde::Deserialize, serde::Serialize)]

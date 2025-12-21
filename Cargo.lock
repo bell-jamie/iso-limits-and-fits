@@ -1657,24 +1657,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a6cb138bb79a146c1bd460005623e142ef0181e3d0219cb493e02f7d08a35695"
 
 [[package]]
-name = "iso_limits_and_fits"
-version = "0.7.0-INDEV"
-dependencies = [
- "eframe",
- "egui",
- "egui_flex",
- "egui_plot",
- "env_logger",
- "getrandom 0.2.16",
- "log",
- "rand",
- "redprint",
- "serde",
- "wasm-bindgen-futures",
- "web-sys",
-]
-
-[[package]]
 name = "jiff"
 version = "0.2.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2481,6 +2463,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "85eae3c4ed2f50dcfe72643da4befc30deadb458a9b590d720cde2f2b1e97da9"
 dependencies = [
  "zerocopy",
+]
+
+[[package]]
+name = "precision_fit_studio"
+version = "0.7.0-INDEV"
+dependencies = [
+ "eframe",
+ "egui",
+ "egui_flex",
+ "egui_plot",
+ "env_logger",
+ "getrandom 0.2.16",
+ "log",
+ "rand",
+ "redprint",
+ "serde",
+ "wasm-bindgen-futures",
+ "web-sys",
 ]
 
 [[package]]

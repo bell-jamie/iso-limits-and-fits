@@ -2,8 +2,9 @@ use egui::{Button, ComboBox, DragValue, Grid, RichText, SelectableLabel, Ui};
 
 use super::{
     material::Material,
+    state::State,
     tolerance::{GradesDeviations, Iso, Tolerance},
-    utils::{State, decimals, req_precision},
+    utils::{decimals, req_precision},
 };
 
 // #[derive(Clone, serde::Deserialize, serde::Serialize)]
