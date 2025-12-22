@@ -1,8 +1,24 @@
 use crate::Studio;
 use crate::modules::component::Component;
 use crate::modules::component::Focus;
+use crate::modules::feature::Feature;
 use crate::modules::utils::decimals;
 use egui::{Align, Frame, Grid, Layout, Ui};
+
+/// Wrapper type for component drag payload
+#[derive(Clone, Copy)]
+pub struct ComponentDrag(pub usize);
+
+/// Wrapper type for material drag payload
+#[derive(Clone, Copy)]
+pub struct MaterialDrag(pub usize);
+
+/// Identifies whether a card is for hub or shaft
+#[derive(Clone, Copy)]
+enum CardType {
+    Hub,
+    Shaft,
+}
 
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct CardGrid {
@@ -13,151 +29,164 @@ pub struct CardGrid {
 impl Default for CardGrid {
     fn default() -> Self {
         Self {
-            gap: 10.0,
+            gap: 7.0,
             card_width: 250.0,
         }
     }
 }
 
 impl CardGrid {
-    fn hub_input(&self, app: &mut Studio, ui: &mut Ui) {
-        let name = app.get_hub_name().unwrap_or("Hub").to_string();
+    fn component_input(&self, app: &mut Studio, ui: &mut Ui, card_type: CardType) {
+        let (name, component_id) = match card_type {
+            CardType::Hub => (app.get_hub_name().unwrap_or("Hub").to_string(), app.hub_id),
+            CardType::Shaft => (
+                app.get_shaft_name().unwrap_or("Shaft").to_string(),
+                app.shaft_id,
+            ),
+        };
         let advanced = app.state.advanced;
+        let card_id = match card_type {
+            CardType::Hub => "hub_card",
+            CardType::Shaft => "shaft_card",
+        };
 
         // Extract data we need before mutable borrow
         let (focus, material_id, compliment) = {
-            let Some(hub) = app.get_hub_mut() else {
+            let component = match card_type {
+                CardType::Hub => app.get_hub_mut(),
+                CardType::Shaft => app.get_shaft_mut(),
+            };
+            let Some(component) = component else {
                 return;
             };
 
+            // Handle auto-scale (sync is handled in feature.rs when size changes)
+            component.handle_auto_scale(ui);
+
             // If not in advanced mode, force focus to primary feature
             if !advanced {
-                hub.focus = if hub.inner_diameter.primary {
+                component.focus = if component.inner_diameter.primary {
                     Focus::Inner
                 } else {
                     Focus::Outer
                 };
             }
 
-            let focus = hub.focus.clone();
-            let material_id = hub.material_id;
+            let focus = component.focus.clone();
+            let material_id = component.material_id;
             let compliment = match focus {
-                Focus::Inner => hub.outer_diameter.clone(),
-                Focus::Outer => hub.inner_diameter.clone(),
-                Focus::Material => hub.inner_diameter.clone(), // not used
+                Focus::Inner => component.outer_diameter.clone(),
+                Focus::Outer => component.inner_diameter.clone(),
+                Focus::Material => component.inner_diameter.clone(), // not used
             };
             (focus, material_id, compliment)
         };
 
-        Frame::group(ui.style()).show(ui, |ui| {
-            ui.set_width(ui.available_width());
-            // Title bar
-            ui.horizontal(|ui| {
-                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    if let Some(hub) = app.get_hub_mut() {
-                        component_input_title_bar(ui, hub, advanced);
-                    }
-                    if let Some(name) = app.get_hub_name_mut() {
-                        // TODO this will need an "else" clause
-                        ui.text_edit_singleline(name);
-                    }
+        // Check if we're dragging a component or material over this card
+        let is_being_dragged = egui::DragAndDrop::has_payload_of_type::<ComponentDrag>(ui.ctx())
+            || egui::DragAndDrop::has_payload_of_type::<MaterialDrag>(ui.ctx());
+        let frame = Frame::group(ui.style());
+
+        let frame_response = frame.show(ui, |ui| {
+            ui.push_id(card_id, |ui| {
+                ui.set_width(ui.available_width());
+                // Title bar
+                ui.horizontal(|ui| {
+                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                        let component = match card_type {
+                            CardType::Hub => app.get_hub_mut(),
+                            CardType::Shaft => app.get_shaft_mut(),
+                        };
+                        if let Some(component) = component {
+                            component_input_title_bar(ui, component, advanced);
+                        }
+                        let name_mut = match card_type {
+                            CardType::Hub => app.get_hub_name_mut(),
+                            CardType::Shaft => app.get_shaft_name_mut(),
+                        };
+                        if let Some(name) = name_mut {
+                            ui.text_edit_singleline(name);
+                        }
+                    });
                 });
+                ui.separator();
+
+                // Content based on focus
+                match focus {
+                    Focus::Inner => {
+                        if let Some(component) = app.component_library.get_mut(component_id) {
+                            component
+                                .inner_diameter
+                                .show(ui, &mut app.state, &name, &compliment);
+                        }
+                    }
+                    Focus::Outer => {
+                        if let Some(component) = app.component_library.get_mut(component_id) {
+                            component
+                                .outer_diameter
+                                .show(ui, &mut app.state, &name, &compliment);
+                        }
+                    }
+                    Focus::Material => {
+                        if let Some(mat) = app.material_library.get_mut(material_id) {
+                            mat.input(ui, &mut Default::default(), &name);
+                        }
+                    }
+                }
             });
-            ui.separator();
-
-            // Content based on focus
-            let hub_id = app.hub_id;
-            match focus {
-                Focus::Inner => {
-                    if let Some(hub) = app.hub_library.get_mut(hub_id) {
-                        hub.inner_diameter
-                            .show(ui, &mut app.state, &name, &compliment);
-                    }
-                }
-                Focus::Outer => {
-                    if let Some(hub) = app.hub_library.get_mut(hub_id) {
-                        hub.outer_diameter
-                            .show(ui, &mut app.state, &name, &compliment);
-                    }
-                }
-                Focus::Material => {
-                    if let Some(mat) = app.material_library.get_mut(material_id) {
-                        mat.input(ui, &mut Default::default(), &name);
-                    }
-                }
-            }
         });
-    }
 
-    fn shaft_input(&self, app: &mut Studio, ui: &mut Ui) {
-        let name = app.get_shaft_name().unwrap_or("Shaft").to_string();
-        let advanced = app.state.advanced;
-
-        // Extract data we need before mutable borrow
-        let (focus, material_id, compliment) = {
-            let Some(shaft) = app.get_shaft_mut() else {
-                return;
-            };
-
-            // If not in advanced mode, force focus to primary feature
-            if !advanced {
-                shaft.focus = if shaft.inner_diameter.primary {
-                    Focus::Inner
-                } else {
-                    Focus::Outer
-                };
-            }
-
-            let focus = shaft.focus.clone();
-            let material_id = shaft.material_id;
-            let compliment = match focus {
-                Focus::Inner => shaft.outer_diameter.clone(),
-                Focus::Outer => shaft.inner_diameter.clone(),
-                Focus::Material => shaft.inner_diameter.clone(), // not used
-            };
-            (focus, material_id, compliment)
-        };
-
-        Frame::group(ui.style()).show(ui, |ui| {
-            ui.set_width(ui.available_width());
-            // Title bar
-            ui.horizontal(|ui| {
-                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    if let Some(shaft) = app.get_shaft_mut() {
-                        component_input_title_bar(ui, shaft, advanced);
-                    }
-                    if let Some(name) = app.get_shaft_name_mut() {
-                        // TODO this will need an "else" clause
-                        ui.text_edit_singleline(name);
-                    }
-                });
-            });
-            ui.separator();
-
-            // Content based on focus
-            let shaft_id = app.shaft_id;
-            match focus {
-                Focus::Inner => {
-                    if let Some(shaft) = app.shaft_library.get_mut(shaft_id) {
-                        shaft
-                            .inner_diameter
-                            .show(ui, &mut app.state, &name, &compliment);
-                    }
-                }
-                Focus::Outer => {
-                    if let Some(shaft) = app.shaft_library.get_mut(shaft_id) {
-                        shaft
-                            .outer_diameter
-                            .show(ui, &mut app.state, &name, &compliment);
-                    }
-                }
-                Focus::Material => {
-                    if let Some(mat) = app.material_library.get_mut(material_id) {
-                        mat.input(ui, &mut Default::default(), &name);
-                    }
+        // Highlight when dragging over
+        if is_being_dragged {
+            let rect = frame_response.response.rect;
+            if let Some(pointer_pos) = ui.ctx().pointer_hover_pos() {
+                if rect.contains(pointer_pos) {
+                    let stroke = egui::Stroke::new(1.5, ui.visuals().selection.bg_fill);
+                    ui.painter().rect_stroke(
+                        rect,
+                        frame.corner_radius,
+                        stroke,
+                        egui::StrokeKind::Outside,
+                    );
                 }
             }
-        });
+        }
+
+        // Check payload type first, then consume only the matching one
+        // dnd_release_payload consumes the payload, so we must check type before calling it
+        let is_component_drag = egui::DragAndDrop::has_payload_of_type::<ComponentDrag>(ui.ctx());
+        let is_material_drag = egui::DragAndDrop::has_payload_of_type::<MaterialDrag>(ui.ctx());
+
+        if is_component_drag {
+            if let Some(payload) = frame_response
+                .response
+                .dnd_release_payload::<ComponentDrag>()
+            {
+                match card_type {
+                    CardType::Hub => app.hub_id = payload.0,
+                    CardType::Shaft => app.shaft_id = payload.0,
+                }
+            }
+        } else if is_material_drag {
+            if let Some(payload) = frame_response
+                .response
+                .dnd_release_payload::<MaterialDrag>()
+            {
+                match card_type {
+                    CardType::Hub => {
+                        if let Some(hub) = app.get_hub_mut() {
+                            hub.material_id = payload.0;
+                        }
+                    }
+                    CardType::Shaft => {
+                        if let Some(shaft) = app.get_shaft_mut() {
+                            shaft.material_id = payload.0;
+                        }
+                    }
+                    _ => (),
+                }
+            }
+        }
     }
 
     fn fit_output(&self, app: &mut Studio, ui: &mut Ui) {
@@ -275,6 +304,22 @@ impl CardGrid {
         Frame::group(ui.style()).show(ui, |ui| {
             ui.set_width(ui.available_width());
             ui.set_height(ui.available_height());
+
+            let box_1 = egui_plot::BoxPlot::new(
+                "hub_box",
+                vec![egui_plot::BoxElem::new(
+                    1.0,
+                    egui_plot::BoxSpread::new(0.1, 0.2, 0.3, 0.4, 0.5),
+                )],
+            );
+
+            egui_plot::Plot::new("test")
+                .show_axes(false)
+                .show_background(false)
+                .show_grid(false)
+                .show(ui, |plot_ui| {
+                    plot_ui.box_plot(box_1);
+                });
         });
     }
 
@@ -282,9 +327,19 @@ impl CardGrid {
         ui.horizontal(|ui| {
             ui.vertical(|ui| {
                 ui.set_width(self.card_width);
-                self.hub_input(app, ui);
+                self.component_input(app, ui, CardType::Hub);
                 ui.add_space(self.gap);
-                self.shaft_input(app, ui);
+                self.component_input(app, ui, CardType::Shaft);
+
+                // Handle size sync after inputs but before fit calculation
+                let state = app.state.clone();
+                if let Some(hub) = app.get_hub_mut() {
+                    hub.handle_sync(state.clone(), ui);
+                }
+                if let Some(shaft) = app.get_shaft_mut() {
+                    shaft.handle_sync(state, ui);
+                }
+
                 ui.add_space(self.gap);
                 self.fit_output(app, ui);
             });

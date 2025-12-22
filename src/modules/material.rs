@@ -43,6 +43,18 @@ impl PartialEq for Material {
 impl Eq for Material {}
 
 impl Material {
+    pub fn default() -> Self {
+        Material {
+            name: "Carbon Steel".to_owned(),
+            temp: 20.0,
+            cte: 11.7,
+            poissons: 0.29,
+            youngs: 210_000.0,
+            ys: 250.0,
+            uts: 440.0,
+        }
+    }
+
     pub fn steel4340() -> Self {
         Material {
             name: "4340 Steel - Annealed".to_owned(),

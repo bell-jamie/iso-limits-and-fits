@@ -17,6 +17,18 @@ pub struct Component {
     pub focus: Focus,
 }
 
+impl Default for Component {
+    fn default() -> Self {
+        Component {
+            name: "Component".to_owned(),
+            inner_diameter: Feature::default_hole(),
+            outer_diameter: Feature::default_shaft(),
+            material_id: 0,
+            focus: Focus::Inner,
+        }
+    }
+}
+
 impl Component {
     pub fn default_hub() -> Self {
         Component {
@@ -48,13 +60,14 @@ impl Component {
     }
 
     /// Handle automatic size synchronization
-    pub fn handle_sync(&mut self, state: State) {
+    pub fn handle_sync(&mut self, state: State, ui: &mut Ui) {
         if state.sync_size {
             if self.inner_diameter.primary {
                 self.inner_diameter.size = state.synced_size;
             } else {
                 self.outer_diameter.size = state.synced_size;
             }
+            ui.ctx().request_repaint();
         }
     }
 

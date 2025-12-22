@@ -1,8 +1,11 @@
-use egui::{Color32, CornerRadius, Stroke, Style};
+use egui::{Color32, CornerRadius, FontDefinitions, Stroke, Style};
 
 /// Apply all application-specific theming.
 /// Call exactly once at startup.
 pub fn install(ctx: &egui::Context) {
+    // Fonts
+    // ctx.set_fonts(fonts());
+
     // Apply shared styling to both themes
     ctx.style_mut_of(egui::Theme::Light, apply_shared_styling);
     ctx.style_mut_of(egui::Theme::Dark, apply_shared_styling);
@@ -11,6 +14,15 @@ pub fn install(ctx: &egui::Context) {
     ctx.style_mut_of(egui::Theme::Light, apply_light_colors);
     ctx.style_mut_of(egui::Theme::Dark, apply_dark_colors);
 }
+
+// fn fonts() -> FontDefinitions {
+//     let mut fonts = FontDefinitions::default();
+//     fonts.families.insert(
+//         egui::TextStyle::Small,
+//         (egui::FontFamily::Proportional, 5.0),
+//     );
+//     fonts
+// }
 
 fn apply_shared_styling(style: &mut Style) {
     let rounding = CornerRadius::same(10);
@@ -37,39 +49,51 @@ fn apply_shared_styling(style: &mut Style) {
 fn apply_light_colors(style: &mut Style) {
     // --bg-dark: #ffffff, --bg-card: #ffffff, --border-color: #e5e7eb, --accent-primary: #2563eb
     let border = Color32::from_rgb(0xd1, 0xd5, 0xdb); // darker border for visibility
-    let bg = Color32::from_rgb(0xff, 0xff, 0xff);
-
-    style.visuals.panel_fill = bg;
-    style.visuals.window_fill = bg;
-
-    style.visuals.widgets.noninteractive.bg_fill = Color32::from_rgb(0xe5, 0xe7, 0xeb);
-    style.visuals.widgets.noninteractive.bg_stroke = Stroke::new(1.0, border);
-
-    // Interactive widgets: subtle fill
-    style.visuals.widgets.inactive.bg_fill = Color32::from_rgb(0xf3, 0xf4, 0xf6);
-    style.visuals.widgets.inactive.weak_bg_fill = Color32::from_rgb(0xf3, 0xf4, 0xf6);
-    style.visuals.widgets.hovered.bg_fill = Color32::from_rgb(0xe5, 0xe7, 0xeb);
-    style.visuals.widgets.hovered.weak_bg_fill = Color32::from_rgb(0xe5, 0xe7, 0xeb);
-    style.visuals.widgets.active.bg_fill = Color32::from_rgb(0xd1, 0xd5, 0xdb);
-    style.visuals.widgets.active.weak_bg_fill = Color32::from_rgb(0xd1, 0xd5, 0xdb);
-    style.visuals.widgets.open.bg_fill = Color32::from_rgb(0xf3, 0xf4, 0xf6);
-    style.visuals.widgets.open.weak_bg_fill = Color32::from_rgb(0xf3, 0xf4, 0xf6);
-
-    style.visuals.selection.bg_fill = Color32::from_rgb(0x25, 0x63, 0xeb);
-    style.visuals.selection.stroke.color = Color32::WHITE;
+    let background_colour = Color32::from_rgb(0xff, 0xff, 0xff);
+    let widget_inactive = Color32::from_rgb(0xf3, 0xf4, 0xf6);
+    let accent_colour = Color32::from_rgb(0x25, 0x63, 0xeb);
+    let accent_stroke = Stroke {
+        width: 1.0,
+        color: accent_colour,
+    };
+    apply_colors(
+        style,
+        border,
+        background_colour,
+        widget_inactive,
+        accent_colour,
+        accent_stroke,
+    );
 }
 
 fn apply_dark_colors(style: &mut Style) {
     // --bg-dark: #1a1a1a, --bg-card: #2a2a2a, --border-color: #3a3a3a, --accent-primary: #4a9eff
     let border = Color32::from_rgb(0x3a, 0x3a, 0x3a);
     let background_colour = Color32::from_rgb(0x1a, 0x1a, 0x1a);
-    // let background_colour = Color32::from_rgb(0x2a, 0x2a, 0x2a);
+    let widget_inactive = Color32::from_rgb(0x3a, 0x3a, 0x3a);
     let accent_colour = Color32::from_rgb(0x4a, 0x9e, 0xff);
     let accent_stroke = Stroke {
         width: 1.0,
         color: Color32::from_rgb(0x4a, 0x9e, 0xff),
     };
+    apply_colors(
+        style,
+        border,
+        background_colour,
+        widget_inactive,
+        accent_colour,
+        accent_stroke,
+    );
+}
 
+fn apply_colors(
+    style: &mut Style,
+    _border: Color32,
+    background_colour: Color32,
+    widget_inactive: Color32,
+    accent_colour: Color32,
+    accent_stroke: Stroke,
+) {
     // Sets the general background colour and ensure that textboxes are seamless
     style.visuals.panel_fill = background_colour;
     style.visuals.extreme_bg_color = background_colour;
@@ -78,9 +102,9 @@ fn apply_dark_colors(style: &mut Style) {
     // style.visuals.widgets.noninteractive.bg_fill = Color32::from_rgb(0x3a, 0x3a, 0x3a);
 
     // Interactive widgets: subtle fill
-    style.visuals.widgets.inactive.bg_fill = Color32::from_rgb(0x3a, 0x3a, 0x3a);
-    style.visuals.widgets.inactive.weak_bg_fill = Color32::from_rgb(0x3a, 0x3a, 0x3a);
-    style.visuals.widgets.hovered.bg_fill = Color32::from_rgb(0x4a, 0x4a, 0x4a);
+    style.visuals.widgets.inactive.bg_fill = widget_inactive;
+    style.visuals.widgets.inactive.weak_bg_fill = widget_inactive;
+    // style.visuals.widgets.hovered.bg_fill = Color32::from_rgb(0x4a, 0x4a, 0x4a);
 
     // Makes the outlines of buttons highlight in the accent colour when hovered and interacted with
     style.visuals.widgets.hovered.bg_stroke = accent_stroke;
@@ -93,5 +117,6 @@ fn apply_dark_colors(style: &mut Style) {
     // style.visuals.widgets.open.bg_fill = Color32::from_rgb(0x3a, 0x3a, 0x3a);
     // style.visuals.widgets.open.weak_bg_fill = Color32::from_rgb(0x3a, 0x3a, 0x3a);
 
-    style.visuals.selection.bg_fill = accent_colour; // highlight colour
+    style.visuals.selection.bg_fill = accent_colour;
+    style.visuals.selection.stroke.color = Color32::WHITE;
 }

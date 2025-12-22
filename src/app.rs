@@ -1,6 +1,6 @@
 use crate::modules::{
     cards::CardGrid, component::Component, fit::Fit, mat_data::material_list, material,
-    material::Material, plot, state, theme, utils,
+    material::Material, plot, state, state::State, theme, utils,
 };
 use egui::{Button, Color32, CursorIcon, RichText, Ui};
 
@@ -11,19 +11,17 @@ pub struct Studio {
     pub shaft_id: usize,
     pub state: state::State,
     pub material_library: Vec<Material>,
-    pub hub_library: Vec<Component>,
-    pub shaft_library: Vec<Component>,
+    pub component_library: Vec<Component>,
 }
 
 impl Default for Studio {
     fn default() -> Self {
         Self {
             hub_id: 0,
-            shaft_id: 0,
-            state: state::State::default(),
+            shaft_id: 1,
+            state: State::default(),
             material_library: material_list().into_iter().collect(),
-            hub_library: vec![Component::default_hub()],
-            shaft_library: vec![Component::default_shaft()],
+            component_library: vec![Component::default_hub(), Component::default_shaft()],
         }
     }
 }
@@ -90,12 +88,7 @@ impl Studio {
         egui::ScrollArea::vertical()
             .auto_shrink([false, false])
             .show(ui, |ui| {
-                // Hubs section
-                utils::accordion(ui, "hubs_accordion", "Hubs", false, |ui| {
-                    ui.label("Content of section 1");
-                });
-                ui.label(egui::RichText::new("Bolts").strong());
-                ui.add_space(4.0);
+                crate::modules::library::render(self, ui);
             });
     }
 
@@ -120,8 +113,12 @@ impl Studio {
 
     fn show_menu_bar(&mut self, ui: &mut Ui) {
         egui::MenuBar::new().ui(ui, |ui| {
-            egui::widgets::global_theme_preference_switch(ui);
+            if ui.button("☰").clicked() {
+                self.state.show_library_panel = !self.state.show_library_panel;
+            };
             self.state.zoom.show(ui);
+
+            egui::widgets::global_theme_preference_switch(ui);
 
             // ui.separator();
 
@@ -143,11 +140,10 @@ impl Studio {
                 .clicked()
             {
                 self.hub_id = 0;
-                self.shaft_id = 0;
+                self.shaft_id = 1;
                 self.state = state::State::default();
                 self.material_library = material_list().into_iter().collect();
-                self.hub_library = vec![Component::default_hub()];
-                self.shaft_library = vec![Component::default_shaft()];
+                self.component_library = vec![Component::default_hub(), Component::default_shaft()];
             }
 
             if self.state.debug {
@@ -169,8 +165,8 @@ impl Studio {
     }
 
     pub fn get_hub_name(&self) -> Option<&str> {
-        self.hub_library
-            .get(self.state.hub_id)
+        self.component_library
+            .get(self.hub_id)
             .map(|hub| hub.name.as_str())
     }
 
@@ -183,8 +179,8 @@ impl Studio {
     }
 
     pub fn get_shaft_name(&self) -> Option<&str> {
-        self.shaft_library
-            .get(self.state.shaft_id)
+        self.component_library
+            .get(self.shaft_id)
             .map(|shaft| shaft.name.as_str())
     }
 
@@ -197,19 +193,19 @@ impl Studio {
     }
 
     pub fn get_hub(&self) -> Option<&Component> {
-        self.hub_library.get(self.hub_id)
+        self.component_library.get(self.hub_id)
     }
 
     pub fn get_shaft(&self) -> Option<&Component> {
-        self.shaft_library.get(self.shaft_id)
+        self.component_library.get(self.shaft_id)
     }
 
     pub fn get_hub_mut(&mut self) -> Option<&mut Component> {
-        self.hub_library.get_mut(self.hub_id)
+        self.component_library.get_mut(self.hub_id)
     }
 
     pub fn get_shaft_mut(&mut self) -> Option<&mut Component> {
-        self.shaft_library.get_mut(self.shaft_id)
+        self.component_library.get_mut(self.shaft_id)
     }
 
     pub fn get_material(&self, id: usize) -> Option<&Material> {
@@ -232,6 +228,8 @@ impl eframe::App for Studio {
         // Put your widgets into a `SidePanel`, `TopBottomPanel`, `CentralPanel`, `Window` or `Area`.
         // For inspiration and more examples, go to https://emilk.github.io/egui
         crate::modules::shortcuts::inputs(ctx, self);
+
+        crate::modules::modal::delete_component(ctx, self);
 
         egui::TopBottomPanel::bottom("status_bar").show(ctx, |ui| {
             self.show_status_bar(ui);
