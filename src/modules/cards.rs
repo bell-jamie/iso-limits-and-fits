@@ -300,26 +300,28 @@ impl CardGrid {
         });
     }
 
-    fn schematic(&self, app: &mut Studio, ui: &mut Ui) {
+    fn fit_display(&self, app: &mut Studio, ui: &mut Ui) {
         Frame::group(ui.style()).show(ui, |ui| {
             ui.set_width(ui.available_width());
             ui.set_height(ui.available_height());
 
-            let box_1 = egui_plot::BoxPlot::new(
-                "hub_box",
-                vec![egui_plot::BoxElem::new(
-                    1.0,
-                    egui_plot::BoxSpread::new(0.1, 0.2, 0.3, 0.4, 0.5),
-                )],
-            );
+            crate::modules::plot::fit_display(app, ui);
 
-            egui_plot::Plot::new("test")
-                .show_axes(false)
-                .show_background(false)
-                .show_grid(false)
-                .show(ui, |plot_ui| {
-                    plot_ui.box_plot(box_1);
-                });
+            // let box_1 = egui_plot::BoxPlot::new(
+            //     "hub_box",
+            //     vec![egui_plot::BoxElem::new(
+            //         1.0,
+            //         egui_plot::BoxSpread::new(0.1, 0.2, 0.3, 0.4, 0.5),
+            //     )],
+            // );
+
+            // egui_plot::Plot::new("test")
+            //     .show_axes(false)
+            //     .show_background(false)
+            //     .show_grid(false)
+            //     .show(ui, |plot_ui| {
+            //         plot_ui.box_plot(box_1);
+            //     });
         });
     }
 
@@ -345,7 +347,7 @@ impl CardGrid {
             });
             ui.vertical(|ui| {
                 ui.set_width(self.card_width / 2.0);
-                self.schematic(app, ui);
+                self.fit_display(app, ui);
             })
             // self.visual // you were working here!
         });

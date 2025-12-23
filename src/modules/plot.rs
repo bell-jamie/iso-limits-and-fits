@@ -4,6 +4,8 @@ use egui::{Align2, Color32, Frame, RichText, Stroke, Ui, epaint::CircleShape, ve
 use egui_plot::{Line, LineStyle, Plot, PlotItem, PlotPoint, PlotPoints, PlotUi, Polygon, Text};
 use serde::Deserialize;
 
+use crate::Studio;
+
 use super::{
     component::Component,
     feature::Feature,
@@ -94,7 +96,7 @@ pub fn side_by_side(
                 .show_y(false)
                 .show(ui, |ui| {
                     let zoom = calculate_plot_zoom(&ui) / 2.5; // magic number oopsies
-                    set_plot_limits(ui, &style, state.debug, width / 1.8, height / 1.8);
+                    set_plot_limits(ui, state.debug, width / 1.8, height / 1.8);
                     end_view(ui, &style, lh_component, lh_centre, lh_text, false, zoom);
                     centre_view(ui, &style, lh_component, rh_component, centre);
                     end_view(ui, &style, rh_component, rh_centre, rh_text, true, zoom);
@@ -288,7 +290,7 @@ fn _fit_temp_graph_old(plot_ui: &mut Ui, state: &State, hub: &Component, shaft: 
     */
 }
 
-fn set_plot_limits(ui: &mut PlotUi, style: &Style, visible: bool, x: f64, y: f64) {
+fn set_plot_limits(plot_ui: &mut PlotUi, visible: bool, x: f64, y: f64) {
     let (p0, p1, p2) = (
         Point::new(x, 0.9 * y),
         Point::new(x, y),
@@ -319,7 +321,7 @@ fn set_plot_limits(ui: &mut PlotUi, style: &Style, visible: bool, x: f64, y: f64
             .point(p2.transformed(mirror_x))
             .build();
         markers.set_stroke_colour([255, 0, 0, 255]);
-        render_component(ui, &markers, None, None);
+        render_component(plot_ui, &markers, None, None);
     } else {
         let mut diag = RedprintComponent::builder("diag")
             .add_path()
@@ -327,7 +329,7 @@ fn set_plot_limits(ui: &mut PlotUi, style: &Style, visible: bool, x: f64, y: f64
             .point(around_origin.transform_point(p1))
             .build();
         diag.set_stroke_width(0.0);
-        render_component(ui, &diag, None, None);
+        render_component(plot_ui, &diag, None, None);
     }
 }
 
@@ -922,4 +924,91 @@ fn calculate_plot_zoom(ui: &PlotUi) -> f32 {
     let (pp1, pp2) = (PlotPoint::new(0.0, 0.0), PlotPoint::new(1.0, 0.0));
     let (sp1, sp2) = (ui.screen_from_plot(pp1), ui.screen_from_plot(pp2));
     sp1.distance(sp2)
+}
+
+pub fn fit_display(app: &mut Studio, ui: &mut Ui) {
+    let width = ui.available_width();
+    let height = ui.available_height();
+    let ratio = height / width;
+
+    if let (Some(hub), Some(shaft)) = (app.get_hub(), app.get_shaft()) {
+        let (hub_upper, hub_lower) = (
+            hub.inner_diameter.upper_limit(None),
+            hub.inner_diameter.lower_limit(None),
+        );
+        let (shaft_upper, shaft_lower) = (
+            shaft.outer_diameter.upper_limit(None),
+            shaft.outer_diameter.lower_limit(None),
+        );
+
+        // Scaling
+        let (comp_max, comp_min) = (hub_upper.max(shaft_upper), hub_lower.min(shaft_lower));
+        let y_mean = (hub.inner_diameter.size + shaft.outer_diameter.size) / 2.0;
+        let y_max = 2.0 * comp_max - y_mean;
+        let y_min = 2.0 * comp_min - y_mean;
+        let y_range = y_max - y_min;
+        let x_width = y_range / ratio as f64;
+        let x = x_width / 4.0;
+
+        // Hatching
+        let hatching_style = HatchingStyle::new(
+            0.5,
+            y_range / 20.0,
+            45.0f64.to_radians(),
+            ui.visuals().text_color().to_array(),
+        );
+
+        // Create the plot components
+        let component_style =
+            ComponentStyle::new(ui.visuals().text_color().to_array(), 1.0, [0, 0, 0, 0]);
+
+        let shaft_rect = RedprintComponent::builder("shaft_rect")
+            .cull(false)
+            .style(component_style)
+            .hatching(hatching_style)
+            .add_rect_2(Point::new(0.0 * x, y_min), Point::new(1.4 * x, shaft_upper))
+            .build();
+        let hub_rect = RedprintComponent::builder("hub_rect")
+            .cull(false)
+            .style(component_style)
+            .hatching(hatching_style.with_angle_degrees(-45.0))
+            .add_rect_2(Point::new(2.6 * x, y_max), Point::new(4.0 * x, hub_lower))
+            .build();
+
+        let mut shaft_tol = RedprintComponent::builder("shaft_tol")
+            .cull(false)
+            .add_rect_2(
+                Point::new(1.5 * x, shaft_upper),
+                Point::new(2.5 * x, shaft_lower),
+            )
+            .build();
+        let mut hub_tol = RedprintComponent::builder("hub_tol")
+            .cull(false)
+            .add_rect_2(
+                Point::new(1.5 * x, hub_upper),
+                Point::new(2.5 * x, hub_lower),
+            )
+            .build();
+
+        shaft_tol.set_fill_colour([255, 0, 0, 102]);
+        shaft_tol.set_stroke_width(0.0);
+        hub_tol.set_fill_colour([0, 0, 255, 102]);
+        hub_tol.set_stroke_width(0.0);
+
+        Plot::new("fit_display")
+            .allow_drag(false)
+            .allow_scroll(false)
+            .show_axes(false)
+            .show_background(false)
+            .show_grid(false)
+            .show_x(false)
+            // .include_y(hub_rect.bounding_box().map(|bb| bb.min.y).unwrap_or(0.0))
+            // .include_y(shaft_rect.bounding_box().map(|bb| bb.max.y).unwrap_or(0.0))
+            .show(ui, |plot_ui| {
+                render_component(plot_ui, &shaft_tol, None, None);
+                render_component(plot_ui, &hub_tol, None, None);
+                render_component(plot_ui, &shaft_rect, None, None);
+                render_component(plot_ui, &hub_rect, None, None);
+            });
+    }
 }
