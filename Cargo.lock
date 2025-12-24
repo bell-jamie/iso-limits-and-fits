@@ -2625,7 +2625,7 @@ dependencies = [
 [[package]]
 name = "redprint"
 version = "0.1.0"
-source = "git+https://github.com/bell-jamie/redprint.git#1e2f0a8bb4a07c83d9bc0654289facafca58c28e"
+source = "git+https://github.com/bell-jamie/redprint.git#89c582565e454c8bb949923d564bb0da5e4e0c6b"
 dependencies = [
  "eframe",
  "egui",

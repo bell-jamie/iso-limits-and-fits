@@ -844,7 +844,7 @@ fn plot_centreline(ui: &mut PlotUi, style: &Style, centre: Point, size: f64, ang
     // }
 
     let mut underlay = RedprintComponent::builder("underlay")
-        .add_rect_3(
+        .add_para_3(
             Point::new(-ux * size, -uy),
             Point::new(-ux * size, uy),
             Point::new(ux * size, uy),
@@ -942,10 +942,13 @@ pub fn fit_display(app: &mut Studio, ui: &mut Ui) {
         );
 
         // Scaling
-        let (comp_max, comp_min) = (hub_upper.max(shaft_upper), hub_lower.min(shaft_lower));
-        let y_mean = (hub.inner_diameter.size + shaft.outer_diameter.size) / 2.0;
-        let y_max = 2.0 * comp_max - y_mean;
-        let y_min = 2.0 * comp_min - y_mean;
+        let y_mean =
+            (hub.inner_diameter.lower_limit(None) + shaft.outer_diameter.upper_limit(None)) / 2.0;
+        let y_dev_upper = (y_mean - hub_upper.max(shaft_upper)).abs();
+        let y_dev_lower = (y_mean - hub_lower.min(shaft_lower)).abs();
+        let y_lim = 1.5 * y_dev_upper.max(y_dev_lower);
+        let y_max = y_mean + y_lim;
+        let y_min = y_mean - y_lim;
         let y_range = y_max - y_min;
         let x_width = y_range / ratio as f64;
         let x = x_width / 4.0;
@@ -967,46 +970,113 @@ pub fn fit_display(app: &mut Studio, ui: &mut Ui) {
             .style(component_style)
             .hatching(hatching_style)
             .add_rect_2(Point::new(0.0 * x, y_min), Point::new(1.4 * x, shaft_upper))
+            .chamfer_symmetric("para_0_c", x / 3.0)
+            .close()
             .build();
         let hub_rect = RedprintComponent::builder("hub_rect")
             .cull(false)
             .style(component_style)
             .hatching(hatching_style.with_angle_degrees(-45.0))
             .add_rect_2(Point::new(2.6 * x, y_max), Point::new(4.0 * x, hub_lower))
+            .chamfer_symmetric("para_0_d", x / 3.0)
             .build();
 
-        let mut shaft_tol = RedprintComponent::builder("shaft_tol")
+        // RGBA colours (semi-transparent)
+        let red = [255, 51, 51, 120]; // interference
+        let blue = [51, 51, 255, 120]; // clearance
+        let black = [0, 0, 0, 255]; // for lines if needed
+
+        // --- Shaft zones ---
+        let shaft_clearance_top = shaft_upper.min(hub_upper); // clearance can extend above shaft
+        let shaft_clearance_bottom = shaft_lower; // stops at shaft lower tolerance
+        let shaft_interference_top = shaft_upper; // interference limited by shaft
+        let shaft_interference_bottom = shaft_lower.max(hub_lower); // interference reaches deepest hub intrusion
+
+        let mut shaft_clearance = RedprintComponent::builder("shaft_clearance")
             .cull(false)
             .add_rect_2(
-                Point::new(1.5 * x, shaft_upper),
-                Point::new(2.5 * x, shaft_lower),
+                Point::new(1.5 * x, shaft_clearance_top),
+                Point::new(1.95 * x, shaft_clearance_bottom),
             )
             .build();
-        let mut hub_tol = RedprintComponent::builder("hub_tol")
+        shaft_clearance.set_fill_colour(blue);
+        shaft_clearance.set_stroke_width(0.0);
+
+        let mut shaft_interference = RedprintComponent::builder("shaft_interference")
             .cull(false)
             .add_rect_2(
-                Point::new(1.5 * x, hub_upper),
-                Point::new(2.5 * x, hub_lower),
+                Point::new(1.5 * x, shaft_interference_top),
+                Point::new(1.95 * x, shaft_interference_bottom),
             )
             .build();
+        shaft_interference.set_fill_colour(red);
+        shaft_interference.set_stroke_width(0.0);
 
-        shaft_tol.set_fill_colour([255, 0, 0, 102]);
-        shaft_tol.set_stroke_width(0.0);
-        hub_tol.set_fill_colour([0, 0, 255, 102]);
-        hub_tol.set_stroke_width(0.0);
+        // --- Hub zones ---
+        let hub_clearance_top = hub_upper; // cannot exceed hub upper bound
+        let hub_clearance_bottom = hub_lower.max(shaft_lower); // down to possible clearance
+        let hub_interference_top = hub_upper.min(shaft_upper); // cannot exceed hub or shaft
+        let hub_interference_bottom = hub_lower; // deepest interference
 
+        let mut hub_clearance = RedprintComponent::builder("hub_clearance")
+            .cull(false)
+            .add_rect_2(
+                Point::new(2.05 * x, hub_clearance_top),
+                Point::new(2.5 * x, hub_clearance_bottom),
+            )
+            .build();
+        hub_clearance.set_fill_colour(blue);
+        hub_clearance.set_stroke_width(0.0);
+
+        let mut hub_interference = RedprintComponent::builder("hub_interference")
+            .cull(false)
+            .add_rect_2(
+                Point::new(2.05 * x, hub_interference_top),
+                Point::new(2.5 * x, hub_interference_bottom),
+            )
+            .build();
+        hub_interference.set_fill_colour(red);
+        hub_interference.set_stroke_width(0.0);
+
+        // --- Optional divider ---
+        let mut div_2 = RedprintComponent::builder("div_2")
+            .cull(false)
+            .style(component_style)
+            .add_path()
+            .point(Point::new(1.45 * x, y_mean))
+            .point(Point::new(2.55 * x, y_mean))
+            .build();
+        div_2.set_stroke_width(0.5);
+        div_2.set_stroke_colour(black);
+
+        // --- Plot ---
         Plot::new("fit_display")
-            .allow_drag(false)
             .allow_scroll(false)
+            .allow_zoom(false)
             .show_axes(false)
             .show_background(false)
             .show_grid(false)
             .show_x(false)
-            // .include_y(hub_rect.bounding_box().map(|bb| bb.min.y).unwrap_or(0.0))
-            // .include_y(shaft_rect.bounding_box().map(|bb| bb.max.y).unwrap_or(0.0))
             .show(ui, |plot_ui| {
-                render_component(plot_ui, &shaft_tol, None, None);
-                render_component(plot_ui, &hub_tol, None, None);
+                // plot_ui.text(
+                //     egui_plot::Text::new(
+                //         "shaft",
+                //         PlotPoint::from(Point::new(-0.1, y_min).to_array()),
+                //         "Shaft",
+                //     )
+                //     .anchor(egui::Align2::LEFT_BOTTOM),
+                // );
+
+                // let painter = ui.painter();
+                // let pos =
+                //     plot_ui.screen_from_plot(PlotPoint::from(Point::new(-0.1, y_min).to_array()));
+                // let angle = std::f32::consts::FRAC_PI_4;
+
+                render_component(plot_ui, &shaft_clearance, None, None);
+                render_component(plot_ui, &hub_clearance, None, None);
+                render_component(plot_ui, &shaft_interference, None, None);
+                render_component(plot_ui, &hub_interference, None, None);
+                // render_component(plot_ui, &div_2, None, None);
                 render_component(plot_ui, &shaft_rect, None, None);
                 render_component(plot_ui, &hub_rect, None, None);
             });
