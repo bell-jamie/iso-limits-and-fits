@@ -50,19 +50,11 @@ impl Component {
         }
     }
 
-    /// Not thrilled with this clone()
-    pub fn primary_feature(&self) -> Feature {
-        if self.inner_diameter.primary {
-            self.inner_diameter.clone()
-        } else {
-            self.outer_diameter.clone()
-        }
-    }
-
     /// Handle automatic size synchronization
-    pub fn handle_sync(&mut self, state: State, ui: &mut Ui) {
+    /// `is_hub` determines which feature is primary: inner for hub, outer for shaft
+    pub fn handle_sync(&mut self, state: State, ui: &mut Ui, is_hub: bool) {
         if state.sync_size {
-            if self.inner_diameter.primary {
+            if is_hub {
                 self.inner_diameter.size = state.synced_size;
             } else {
                 self.outer_diameter.size = state.synced_size;

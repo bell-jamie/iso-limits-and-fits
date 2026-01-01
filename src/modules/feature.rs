@@ -17,7 +17,6 @@ use super::{
 pub struct Feature {
     pub hole: bool,
     pub standard: bool,
-    pub primary: bool,
     pub enabled: bool,
     pub size: f64,
     pub iso: Iso,
@@ -29,7 +28,6 @@ impl Feature {
         Feature {
             hole: true,
             standard: true,
-            primary: true,
             enabled: true,
             size: 10.0,
             iso: Iso::new("H", "7"),
@@ -41,7 +39,6 @@ impl Feature {
         Feature {
             hole: false,
             standard: true,
-            primary: true,
             enabled: true,
             size: 10.0,
             iso: Iso::new("h", "6"),
@@ -53,7 +50,6 @@ impl Feature {
         Feature {
             hole: true,
             standard: true,
-            primary: false,
             enabled: false,
             size: 5.0,
             iso: Iso::new("H", "12"),
@@ -65,7 +61,6 @@ impl Feature {
         Feature {
             hole: false,
             standard: true,
-            primary: false,
             enabled: false,
             size: 15.0,
             iso: Iso::new("h", "12"),
@@ -134,12 +129,19 @@ impl Feature {
         size * (1.0 + mat.cte * 0.000_001 * delta_temp)
     }
 
-    pub fn show(&mut self, ui: &mut Ui, state: &mut State, id: &str, compliment: &Feature) {
+    pub fn show(
+        &mut self,
+        ui: &mut Ui,
+        state: &mut State,
+        id: &str,
+        compliment: &Feature,
+        is_primary: bool,
+    ) {
         ui.add_space(5.0);
 
         ui.horizontal(|ui| {
             ui.vertical(|ui| {
-                self.feature_input_ui(ui, id, state, compliment);
+                self.feature_input_ui(ui, id, state, compliment, is_primary);
                 if self.enabled {
                     self.feature_output_ui(ui, id, None);
                 }
@@ -160,7 +162,14 @@ impl Feature {
         });
     }
 
-    fn feature_input_ui(&mut self, ui: &mut Ui, id: &str, state: &mut State, compliment: &Feature) {
+    fn feature_input_ui(
+        &mut self,
+        ui: &mut Ui,
+        id: &str,
+        state: &mut State,
+        compliment: &Feature,
+        is_primary: bool,
+    ) {
         let dropdowns = GradesDeviations::default();
         let size_range = if compliment.enabled {
             if self.hole {
@@ -201,7 +210,7 @@ impl Feature {
             //         .on_hover_text("Enable dimension");
             // }
 
-            if self.primary {
+            if is_primary {
                 if ui
                     .add(Button::selectable(state.sync_size, "🔃").frame_when_inactive(true))
                     .on_hover_text("Sync")
@@ -227,7 +236,7 @@ impl Feature {
                 .on_hover_text("Size")
             });
 
-            if self.primary && size_drag.changed() {
+            if is_primary && size_drag.changed() {
                 state.synced_size = self.size;
             }
 

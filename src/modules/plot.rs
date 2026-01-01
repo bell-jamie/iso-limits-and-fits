@@ -10,6 +10,7 @@ use super::{
     component::Component,
     feature::Feature,
     state::State,
+    theme::FitZoneColors,
     utils::{dynamic_precision, text_width},
 };
 
@@ -97,9 +98,27 @@ pub fn side_by_side(
                 .show(ui, |ui| {
                     let zoom = calculate_plot_zoom(&ui) / 2.5; // magic number oopsies
                     set_plot_limits(ui, state.debug, width / 1.8, height / 1.8);
-                    end_view(ui, &style, lh_component, lh_centre, lh_text, false, zoom);
+                    end_view(
+                        ui,
+                        &style,
+                        lh_component,
+                        lh_centre,
+                        lh_text,
+                        false,
+                        zoom,
+                        true,
+                    ); // lh is hub
                     centre_view(ui, &style, lh_component, rh_component, centre);
-                    end_view(ui, &style, rh_component, rh_centre, rh_text, true, zoom);
+                    end_view(
+                        ui,
+                        &style,
+                        rh_component,
+                        rh_centre,
+                        rh_text,
+                        true,
+                        zoom,
+                        false,
+                    ); // rh is shaft
                 });
         });
 }
@@ -184,20 +203,24 @@ fn _fit_temp_graph_old(plot_ui: &mut Ui, state: &State, hub: &Component, shaft: 
         .show_grid(false)
         .show_background(false)
         .show(plot_ui, |plot_ui| {
-            for (component, colour) in &[(hub, Color32::RED), (shaft, Color32::BLUE)] {
+            // Hub uses inner_diameter, shaft uses outer_diameter as primary feature
+            for (component, feature, colour) in &[
+                (hub, &hub.inner_diameter, Color32::RED),
+                (shaft, &shaft.outer_diameter, Color32::BLUE),
+            ] {
                 let mat_t0 = material_at_temp(component, t0);
                 let mat_t1 = material_at_temp(component, t1);
 
                 let (t0_upr, t0_mid, t0_lwr) = (
-                    component.primary_feature().upper_limit(Some(&mat_t0)),
-                    component.primary_feature().middle_limit(Some(&mat_t0)),
-                    component.primary_feature().lower_limit(Some(&mat_t0)),
+                    feature.upper_limit(Some(&mat_t0)),
+                    feature.middle_limit(Some(&mat_t0)),
+                    feature.lower_limit(Some(&mat_t0)),
                 );
 
                 let (t1_upr, t1_mid, t1_lwr) = (
-                    component.primary_feature().upper_limit(Some(&mat_t1)),
-                    component.primary_feature().middle_limit(Some(&mat_t1)),
-                    component.primary_feature().lower_limit(Some(&mat_t1)),
+                    feature.upper_limit(Some(&mat_t1)),
+                    feature.middle_limit(Some(&mat_t1)),
+                    feature.lower_limit(Some(&mat_t1)),
                 );
 
                 let (p0_upr, p1_upr, p0_lwr, p1_lwr) = (
@@ -224,20 +247,24 @@ fn _fit_temp_graph_old(plot_ui: &mut Ui, state: &State, hub: &Component, shaft: 
             }
 
             // Render lines
-            for (component, colour) in &[(hub, Color32::RED), (shaft, Color32::BLUE)] {
+            // Hub uses inner_diameter, shaft uses outer_diameter as primary feature
+            for (component, feature, colour) in &[
+                (hub, &hub.inner_diameter, Color32::RED),
+                (shaft, &shaft.outer_diameter, Color32::BLUE),
+            ] {
                 let mat_t0 = material_at_temp(component, t0);
                 let mat_t1 = material_at_temp(component, t1);
 
                 let (t0_upr, t0_mid, t0_lwr) = (
-                    component.primary_feature().upper_limit(Some(&mat_t0)),
-                    component.primary_feature().middle_limit(Some(&mat_t0)),
-                    component.primary_feature().lower_limit(Some(&mat_t0)),
+                    feature.upper_limit(Some(&mat_t0)),
+                    feature.middle_limit(Some(&mat_t0)),
+                    feature.lower_limit(Some(&mat_t0)),
                 );
 
                 let (t1_upr, t1_mid, t1_lwr) = (
-                    component.primary_feature().upper_limit(Some(&mat_t1)),
-                    component.primary_feature().middle_limit(Some(&mat_t1)),
-                    component.primary_feature().lower_limit(Some(&mat_t1)),
+                    feature.upper_limit(Some(&mat_t1)),
+                    feature.middle_limit(Some(&mat_t1)),
+                    feature.lower_limit(Some(&mat_t1)),
                 );
 
                 let (p0_upr, p1_upr, p0_mid, p1_mid, p0_lwr, p1_lwr) = (
@@ -341,6 +368,7 @@ fn end_view(
     text_pos: Point,
     right: bool,
     zoom: f32,
+    is_hub: bool,
 ) {
     let mut centre_size = 0.0f64;
     let line = Stroke {
@@ -372,7 +400,8 @@ fn end_view(
         );
 
         centre_size = centre_size.max(component.outer_diameter.size);
-    } else if !component.outer_diameter.primary {
+    } else if is_hub {
+        // Hub's primary feature is inner diameter, so outer is secondary
         // Create boundary
         // let boundary_size = component.outer_diameter.size; //style.scale * component.inner_diameter.size;
         // let (mut p1, mut p2) = (centre, centre);
@@ -932,6 +961,9 @@ pub fn fit_display(app: &mut Studio, ui: &mut Ui) {
     let ratio = height / width;
 
     if let (Some(hub), Some(shaft)) = (app.get_hub(), app.get_shaft()) {
+        let hub_name = hub.name.clone();
+        let shaft_name = shaft.name.clone();
+
         let (hub_upper, hub_lower) = (
             hub.inner_diameter.upper_limit(None),
             hub.inner_diameter.lower_limit(None),
@@ -950,8 +982,11 @@ pub fn fit_display(app: &mut Studio, ui: &mut Ui) {
         let y_max = y_mean + y_lim;
         let y_min = y_mean - y_lim;
         let y_range = y_max - y_min;
-        let x_width = y_range / ratio as f64;
-        let x = x_width / 4.0;
+        // Account for text margins in x calculation
+        // Total plot width = 4*x + 2*text_margin, where text_margin = 1.0*x
+        // So total = 4*x + 2*x = 6*x
+        // x_width / ratio = y_range, so x = y_range / (ratio * 6)
+        let x = y_range / (ratio as f64 * 6.0);
 
         // Hatching
         let hatching_style = HatchingStyle::new(
@@ -981,62 +1016,109 @@ pub fn fit_display(app: &mut Studio, ui: &mut Ui) {
             .chamfer_symmetric("para_0_d", x / 3.0)
             .build();
 
-        // RGBA colours (semi-transparent)
-        let red = [255, 51, 51, 120]; // interference
-        let blue = [51, 51, 255, 120]; // clearance
+        // Get theme-appropriate colors for fit zones
+        let fit_colors = FitZoneColors::from_dark_mode(ui.visuals().dark_mode);
+        let blue = fit_colors.clearance;
+        let red = fit_colors.interference;
         let black = [0, 0, 0, 255]; // for lines if needed
 
+        // Zone logic:
+        // - Clearance occurs when shaft < hub (shaft fits inside hole with gap)
+        // - Interference occurs when shaft > hub (shaft larger than hole)
+        //
+        // Zones can overlap to show transition regions (appears purple when both are translucent)
+        //
+        // For shaft column:
+        // - Clearance: shaft sizes that could result in clearance (below hub_upper)
+        // - Interference: shaft sizes that could result in interference (above hub_lower)
+        // - Overlap (transition): between hub_lower and hub_upper
+        //
+        // For hub column:
+        // - Clearance: hub sizes that could result in clearance (above shaft_lower)
+        // - Interference: hub sizes that could result in interference (below shaft_upper)
+        // - Overlap (transition): between shaft_lower and shaft_upper
+
         // --- Shaft zones ---
-        let shaft_clearance_top = shaft_upper.min(hub_upper); // clearance can extend above shaft
-        let shaft_clearance_bottom = shaft_lower; // stops at shaft lower tolerance
-        let shaft_interference_top = shaft_upper; // interference limited by shaft
-        let shaft_interference_bottom = shaft_lower.max(hub_lower); // interference reaches deepest hub intrusion
+        // Clearance: shaft sizes that could be smaller than the hub (below hub_upper)
+        let shaft_clearance_top = shaft_upper.min(hub_upper);
+        let shaft_clearance_bottom = shaft_lower;
+        let has_shaft_clearance = shaft_clearance_top > shaft_clearance_bottom;
 
-        let mut shaft_clearance = RedprintComponent::builder("shaft_clearance")
-            .cull(false)
-            .add_rect_2(
-                Point::new(1.5 * x, shaft_clearance_top),
-                Point::new(1.95 * x, shaft_clearance_bottom),
-            )
-            .build();
-        shaft_clearance.set_fill_colour(blue);
-        shaft_clearance.set_stroke_width(0.0);
+        // Interference: shaft sizes that could be larger than the hub (above hub_lower)
+        let shaft_interference_top = shaft_upper;
+        let shaft_interference_bottom = shaft_lower.max(hub_lower);
+        let has_shaft_interference = shaft_interference_top > shaft_interference_bottom;
 
-        let mut shaft_interference = RedprintComponent::builder("shaft_interference")
-            .cull(false)
-            .add_rect_2(
-                Point::new(1.5 * x, shaft_interference_top),
-                Point::new(1.95 * x, shaft_interference_bottom),
-            )
-            .build();
-        shaft_interference.set_fill_colour(red);
-        shaft_interference.set_stroke_width(0.0);
+        let shaft_clearance = if has_shaft_clearance {
+            let mut comp = RedprintComponent::builder("shaft_clearance")
+                .cull(false)
+                .add_rect_2(
+                    Point::new(1.5 * x, shaft_clearance_top),
+                    Point::new(1.95 * x, shaft_clearance_bottom),
+                )
+                .build();
+            comp.set_fill_colour(blue);
+            comp.set_stroke_width(0.0);
+            Some(comp)
+        } else {
+            None
+        };
+
+        let shaft_interference = if has_shaft_interference {
+            let mut comp = RedprintComponent::builder("shaft_interference")
+                .cull(false)
+                .add_rect_2(
+                    Point::new(1.5 * x, shaft_interference_top),
+                    Point::new(1.95 * x, shaft_interference_bottom),
+                )
+                .build();
+            comp.set_fill_colour(red);
+            comp.set_stroke_width(0.0);
+            Some(comp)
+        } else {
+            None
+        };
 
         // --- Hub zones ---
-        let hub_clearance_top = hub_upper; // cannot exceed hub upper bound
-        let hub_clearance_bottom = hub_lower.max(shaft_lower); // down to possible clearance
-        let hub_interference_top = hub_upper.min(shaft_upper); // cannot exceed hub or shaft
-        let hub_interference_bottom = hub_lower; // deepest interference
+        // Clearance: hub sizes that could be larger than the shaft (above shaft_lower)
+        let hub_clearance_top = hub_upper;
+        let hub_clearance_bottom = hub_lower.max(shaft_lower);
+        let has_hub_clearance = hub_clearance_top > hub_clearance_bottom;
 
-        let mut hub_clearance = RedprintComponent::builder("hub_clearance")
-            .cull(false)
-            .add_rect_2(
-                Point::new(2.05 * x, hub_clearance_top),
-                Point::new(2.5 * x, hub_clearance_bottom),
-            )
-            .build();
-        hub_clearance.set_fill_colour(blue);
-        hub_clearance.set_stroke_width(0.0);
+        // Interference: hub sizes that could be smaller than the shaft (below shaft_upper)
+        let hub_interference_top = hub_upper.min(shaft_upper);
+        let hub_interference_bottom = hub_lower;
+        let has_hub_interference = hub_interference_top > hub_interference_bottom;
 
-        let mut hub_interference = RedprintComponent::builder("hub_interference")
-            .cull(false)
-            .add_rect_2(
-                Point::new(2.05 * x, hub_interference_top),
-                Point::new(2.5 * x, hub_interference_bottom),
-            )
-            .build();
-        hub_interference.set_fill_colour(red);
-        hub_interference.set_stroke_width(0.0);
+        let hub_clearance = if has_hub_clearance {
+            let mut comp = RedprintComponent::builder("hub_clearance")
+                .cull(false)
+                .add_rect_2(
+                    Point::new(2.05 * x, hub_clearance_top),
+                    Point::new(2.5 * x, hub_clearance_bottom),
+                )
+                .build();
+            comp.set_fill_colour(blue);
+            comp.set_stroke_width(0.0);
+            Some(comp)
+        } else {
+            None
+        };
+
+        let hub_interference = if has_hub_interference {
+            let mut comp = RedprintComponent::builder("hub_interference")
+                .cull(false)
+                .add_rect_2(
+                    Point::new(2.05 * x, hub_interference_top),
+                    Point::new(2.5 * x, hub_interference_bottom),
+                )
+                .build();
+            comp.set_fill_colour(red);
+            comp.set_stroke_width(0.0);
+            Some(comp)
+        } else {
+            None
+        };
 
         // --- Optional divider ---
         let mut div_2 = RedprintComponent::builder("div_2")
@@ -1050,6 +1132,9 @@ pub fn fit_display(app: &mut Studio, ui: &mut Ui) {
         div_2.set_stroke_colour(black);
 
         // --- Plot ---
+        // Add margin for rotated text labels (text height becomes width after rotation)
+        let text_margin = x * 1.0;
+
         Plot::new("fit_display")
             .allow_scroll(false)
             .allow_zoom(false)
@@ -1057,6 +1142,12 @@ pub fn fit_display(app: &mut Studio, ui: &mut Ui) {
             .show_background(false)
             .show_grid(false)
             .show_x(false)
+            .include_x(-text_margin)
+            .include_x(4.0 * x + text_margin)
+            .label_formatter(|_name, point| {
+                let size_dp = dynamic_precision(point.y, 4);
+                format!("{:.size_dp$} mm", point.y)
+            })
             .show(ui, |plot_ui| {
                 // plot_ui.text(
                 //     egui_plot::Text::new(
@@ -1072,13 +1163,84 @@ pub fn fit_display(app: &mut Studio, ui: &mut Ui) {
                 //     plot_ui.screen_from_plot(PlotPoint::from(Point::new(-0.1, y_min).to_array()));
                 // let angle = std::f32::consts::FRAC_PI_4;
 
-                render_component(plot_ui, &shaft_clearance, None, None);
-                render_component(plot_ui, &hub_clearance, None, None);
-                render_component(plot_ui, &shaft_interference, None, None);
-                render_component(plot_ui, &hub_interference, None, None);
+                if let Some(ref comp) = shaft_clearance {
+                    render_component(plot_ui, comp, None, None);
+                }
+                if let Some(ref comp) = hub_clearance {
+                    render_component(plot_ui, comp, None, None);
+                }
+                if let Some(ref comp) = shaft_interference {
+                    render_component(plot_ui, comp, None, None);
+                }
+                if let Some(ref comp) = hub_interference {
+                    render_component(plot_ui, comp, None, None);
+                }
                 // render_component(plot_ui, &div_2, None, None);
                 render_component(plot_ui, &shaft_rect, None, None);
                 render_component(plot_ui, &hub_rect, None, None);
+
+                // Rotated component name labels along the hatched rectangles
+                // Both rotated -90 degrees from x axis (text reads top to bottom)
+                // Shaft: bottom left of shaft component
+                // Hub: top right of hub component
+                let shaft_label_pos = PlotPoint::new(0.0 * x, y_min);
+                let hub_label_pos = PlotPoint::new(4.0 * x, y_max);
+
+                let shaft_screen_pos = plot_ui.screen_from_plot(shaft_label_pos);
+                let hub_screen_pos = plot_ui.screen_from_plot(hub_label_pos);
+
+                let ctx = plot_ui.ctx().clone();
+                let text_color = ctx.style().visuals.text_color();
+                let font_id = egui::FontId::new(13.0, egui::FontFamily::Proportional);
+
+                // Shaft label (rotated -90 degrees, text reads top to bottom)
+                let shaft_galley = ctx.fonts_mut(|f| {
+                    f.layout_no_wrap(shaft_name.clone(), font_id.clone(), text_color)
+                });
+                let shaft_text_height = shaft_galley.size().y;
+                // After -90° rotation, offset to position at bottom-left of shaft
+                let shaft_adjusted_pos = egui::pos2(
+                    shaft_screen_pos.x - shaft_text_height - 2.0,
+                    shaft_screen_pos.y, // - shaft_text_width,
+                );
+                let shaft_text_shape = egui::epaint::TextShape {
+                    pos: shaft_adjusted_pos,
+                    galley: shaft_galley,
+                    underline: egui::Stroke::NONE,
+                    fallback_color: text_color,
+                    override_text_color: None,
+                    opacity_factor: 1.0,
+                    angle: -std::f32::consts::FRAC_PI_2,
+                };
+                ctx.layer_painter(egui::LayerId::new(
+                    egui::Order::Foreground,
+                    egui::Id::new("shaft_label"),
+                ))
+                .add(egui::Shape::Text(shaft_text_shape));
+
+                // Hub label (rotated -90 degrees, text reads top to bottom)
+                let hub_galley = ctx
+                    .fonts_mut(|f| f.layout_no_wrap(hub_name.clone(), font_id.clone(), text_color));
+                let hub_text_width = hub_galley.size().x;
+                // After -90° rotation, offset to position at top-right of hub
+                let hub_adjusted_pos = egui::pos2(
+                    hub_screen_pos.x + 2.0, // - hub_text_height,
+                    hub_screen_pos.y + hub_text_width,
+                );
+                let hub_text_shape = egui::epaint::TextShape {
+                    pos: hub_adjusted_pos,
+                    galley: hub_galley,
+                    underline: egui::Stroke::NONE,
+                    fallback_color: text_color,
+                    override_text_color: None,
+                    opacity_factor: 1.0,
+                    angle: -std::f32::consts::FRAC_PI_2,
+                };
+                ctx.layer_painter(egui::LayerId::new(
+                    egui::Order::Foreground,
+                    egui::Id::new("hub_label"),
+                ))
+                .add(egui::Shape::Text(hub_text_shape));
             });
     }
 }

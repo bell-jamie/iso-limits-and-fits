@@ -1,5 +1,36 @@
 use egui::{Color32, CornerRadius, FontDefinitions, Stroke, Style};
 
+/// Fit zone colors for interference/clearance display
+#[derive(Clone, Copy)]
+pub struct FitZoneColors {
+    pub clearance: [u8; 4],    // RGBA
+    pub interference: [u8; 4], // RGBA
+}
+
+impl FitZoneColors {
+    pub fn light() -> Self {
+        Self {
+            clearance: [0, 80, 220, 120],     // Saturated blue with alpha
+            interference: [220, 20, 20, 120], // Saturated red with alpha
+        }
+    }
+
+    pub fn dark() -> Self {
+        Self {
+            clearance: [40, 120, 255, 120], // Saturated bright blue for dark mode
+            interference: [255, 40, 40, 120], // Saturated bright red for dark mode
+        }
+    }
+
+    pub fn from_dark_mode(dark_mode: bool) -> Self {
+        if dark_mode {
+            Self::dark()
+        } else {
+            Self::light()
+        }
+    }
+}
+
 /// Apply all application-specific theming.
 /// Call exactly once at startup.
 pub fn install(ctx: &egui::Context) {

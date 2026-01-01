@@ -64,11 +64,11 @@ impl CardGrid {
             component.handle_auto_scale(ui);
 
             // If not in advanced mode, force focus to primary feature
+            // Hub's primary feature is inner diameter, shaft's is outer diameter
             if !advanced {
-                component.focus = if component.inner_diameter.primary {
-                    Focus::Inner
-                } else {
-                    Focus::Outer
+                component.focus = match card_type {
+                    CardType::Hub => Focus::Inner,
+                    CardType::Shaft => Focus::Outer,
                 };
             }
 
@@ -112,19 +112,39 @@ impl CardGrid {
                 ui.separator();
 
                 // Content based on focus
+                // is_primary: hub's inner is primary, shaft's outer is primary
+                let is_hub = matches!(card_type, CardType::Hub);
                 match focus {
                     Focus::Inner => {
+                        let is_primary = is_hub; // inner is primary for hub
                         if let Some(component) = app.component_library.get_mut(component_id) {
-                            component
-                                .inner_diameter
-                                .show(ui, &mut app.state, &name, &compliment);
+                            // Primary features are always enabled
+                            if is_primary {
+                                component.inner_diameter.enabled = true;
+                            }
+                            component.inner_diameter.show(
+                                ui,
+                                &mut app.state,
+                                &name,
+                                &compliment,
+                                is_primary,
+                            );
                         }
                     }
                     Focus::Outer => {
+                        let is_primary = !is_hub; // outer is primary for shaft
                         if let Some(component) = app.component_library.get_mut(component_id) {
-                            component
-                                .outer_diameter
-                                .show(ui, &mut app.state, &name, &compliment);
+                            // Primary features are always enabled
+                            if is_primary {
+                                component.outer_diameter.enabled = true;
+                            }
+                            component.outer_diameter.show(
+                                ui,
+                                &mut app.state,
+                                &name,
+                                &compliment,
+                                is_primary,
+                            );
                         }
                     }
                     Focus::Material => {
@@ -162,9 +182,18 @@ impl CardGrid {
                 .response
                 .dnd_release_payload::<ComponentDrag>()
             {
+                // Prevent the same component from being used as both hub and shaft
                 match card_type {
-                    CardType::Hub => app.hub_id = payload.0,
-                    CardType::Shaft => app.shaft_id = payload.0,
+                    CardType::Hub => {
+                        if payload.0 != app.shaft_id {
+                            app.hub_id = payload.0;
+                        }
+                    }
+                    CardType::Shaft => {
+                        if payload.0 != app.hub_id {
+                            app.shaft_id = payload.0;
+                        }
+                    }
                 }
             }
         } else if is_material_drag {
@@ -183,7 +212,6 @@ impl CardGrid {
                             shaft.material_id = payload.0;
                         }
                     }
-                    _ => (),
                 }
             }
         }
@@ -336,10 +364,10 @@ impl CardGrid {
                 // Handle size sync after inputs but before fit calculation
                 let state = app.state.clone();
                 if let Some(hub) = app.get_hub_mut() {
-                    hub.handle_sync(state.clone(), ui);
+                    hub.handle_sync(state.clone(), ui, true); // is_hub = true
                 }
                 if let Some(shaft) = app.get_shaft_mut() {
-                    shaft.handle_sync(state, ui);
+                    shaft.handle_sync(state, ui, false); // is_hub = false
                 }
 
                 ui.add_space(self.gap);
@@ -359,7 +387,7 @@ impl CardGrid {
 fn component_input_title_bar(ui: &mut Ui, component: &mut Component, advanced: bool) {
     // Focus buttons in reverse order (right-to-left layout)
     for (focus_val, label) in [
-        (Focus::Material, "MATL"),
+        (Focus::Material, "MAT"),
         (Focus::Outer, "OD"),
         (Focus::Inner, "ID"),
     ] {

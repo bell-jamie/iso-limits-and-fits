@@ -11,6 +11,7 @@ use egui::{Button, RichText, Ui};
 
 pub fn render(app: &mut Studio, ui: &mut Ui) {
     components(app, ui);
+    ui.separator();
     materials(app, ui);
 }
 
@@ -37,7 +38,7 @@ fn components(app: &mut Studio, ui: &mut Ui) {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     // Delete button (only if more than 2 components)
                     if app.component_library.len() > 2 {
-                        let delete_btn = Button::new(RichText::new("×")).frame(false);
+                        let delete_btn = Button::new(RichText::new("🗑")).frame(false);
                         if ui.add(delete_btn).on_hover_text("Delete").clicked() {
                             ui.ctx().data_mut(|d| {
                                 d.insert_temp(egui::Id::new("pending_delete"), i);
@@ -105,7 +106,7 @@ fn materials(app: &mut Studio, ui: &mut Ui) {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     // Delete button (only if more than 2 components)
                     if app.material_library.len() > 2 {
-                        let delete_btn = Button::new(RichText::new("×")).frame(false);
+                        let delete_btn = Button::new(RichText::new("🗑")).frame(false);
                         if ui.add(delete_btn).on_hover_text("Delete").clicked() {
                             ui.ctx().data_mut(|d| {
                                 d.insert_temp(egui::Id::new("pending_delete"), i);
