@@ -40,9 +40,66 @@ impl Studio {
         Default::default()
     }
 
+    fn show_menu_bar(&mut self, ui: &mut Ui) {
+        egui::MenuBar::new().ui(ui, |ui| {
+            if ui.button("🖹").on_hover_text("Library").clicked() {
+                self.state.show_library_panel = !self.state.show_library_panel;
+            };
+            self.state.zoom.show(ui);
+
+            egui::widgets::global_theme_preference_switch(ui);
+
+            ui.separator();
+
+            // ui.toggle_value(&mut self.state.advanced, "Advanced");
+            if ui
+                .add(Button::selectable(self.state.advanced, "Advanced").frame_when_inactive(true))
+                .clicked()
+            {
+                self.state.advanced = !self.state.advanced;
+            }
+
+            ui.toggle_value(&mut self.state.thermal, "Thermal");
+            // if ui.add(Button::selectable(self.state.thermal, "Thermal")).clicked() {
+            //     self.state.thermal = !self.state.thermal;
+            // }
+
+            // ui.toggle_value(&mut self.state.thermal, "Thermal");
+            // ui.toggle_value(&mut self.state.interference, "Inteference");
+
+            // ui.button("Stress").on_hover_text("Add me");
+
+            if ui
+                .add(Button::new("Reset").frame_when_inactive(true))
+                .clicked()
+            {
+                self.hub_id = 0;
+                self.shaft_id = 1;
+                self.state = state::State::default();
+                self.material_library = material_list().into_iter().collect();
+                self.component_library = vec![Component::default_hub(), Component::default_shaft()];
+            }
+
+            if self.state.debug {
+                ui.separator();
+
+                ui.label(RichText::new("DEBUG").strong().color(Color32::RED))
+                    .on_hover_cursor(CursorIcon::default());
+
+                ui.toggle_value(&mut self.state.force_valid, "Force Valid");
+
+                // if ui.add(Button::new("Random")).clicked() {
+                //     self.state.sync_size = false;
+                //     self.hole = Feature::random(true, self.state.force_valid);
+                //     self.shaft = Feature::random(false, self.state.force_valid);
+                //     self.fit = Fit::new(&self.hole, &self.shaft);
+                // }
+            }
+        });
+    }
+
     fn show_status_bar(&mut self, ui: &mut egui::Ui) {
         egui::Frame::new()
-            .inner_margin(egui::Margin::symmetric(8, 4))
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
                     let release_colour = Color32::from_rgb(0, 169, 0);
@@ -105,63 +162,10 @@ impl Studio {
 
         egui::ScrollArea::both()
             .auto_shrink([false, false])
-            .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden)
+            // .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden)
             .show(ui, |ui| {
                 card_grid.render_cards(self, ui);
             });
-    }
-
-    fn show_menu_bar(&mut self, ui: &mut Ui) {
-        egui::MenuBar::new().ui(ui, |ui| {
-            if ui.button("☰").clicked() {
-                self.state.show_library_panel = !self.state.show_library_panel;
-            };
-            self.state.zoom.show(ui);
-
-            egui::widgets::global_theme_preference_switch(ui);
-
-            // ui.separator();
-
-            // ui.toggle_value(&mut self.state.advanced, "Advanced");
-            if ui
-                .add(Button::selectable(self.state.advanced, "Advanced").frame_when_inactive(true))
-                .clicked()
-            {
-                self.state.advanced = !self.state.advanced;
-            }
-
-            // ui.toggle_value(&mut self.state.thermal, "Thermal");
-            // ui.toggle_value(&mut self.state.interference, "Inteference");
-
-            // ui.button("Stress").on_hover_text("Add me");
-
-            if ui
-                .add(Button::new("Reset").frame_when_inactive(true))
-                .clicked()
-            {
-                self.hub_id = 0;
-                self.shaft_id = 1;
-                self.state = state::State::default();
-                self.material_library = material_list().into_iter().collect();
-                self.component_library = vec![Component::default_hub(), Component::default_shaft()];
-            }
-
-            if self.state.debug {
-                ui.separator();
-
-                ui.label(RichText::new("DEBUG").strong().color(Color32::RED))
-                    .on_hover_cursor(CursorIcon::default());
-
-                ui.toggle_value(&mut self.state.force_valid, "Force Valid");
-
-                // if ui.add(Button::new("Random")).clicked() {
-                //     self.state.sync_size = false;
-                //     self.hole = Feature::random(true, self.state.force_valid);
-                //     self.shaft = Feature::random(false, self.state.force_valid);
-                //     self.fit = Fit::new(&self.hole, &self.shaft);
-                // }
-            }
-        });
     }
 
     pub fn get_hub_name(&self) -> Option<&str> {

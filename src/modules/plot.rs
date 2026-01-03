@@ -974,14 +974,28 @@ pub fn fit_display(app: &mut Studio, ui: &mut Ui) {
         );
 
         // Scaling
-        let y_mean =
-            (hub.inner_diameter.lower_limit(None) + shaft.outer_diameter.upper_limit(None)) / 2.0;
-        let y_dev_upper = (y_mean - hub_upper.max(shaft_upper)).abs();
-        let y_dev_lower = (y_mean - hub_lower.min(shaft_lower)).abs();
-        let y_lim = 1.5 * y_dev_upper.max(y_dev_lower);
-        let y_max = y_mean + y_lim;
-        let y_min = y_mean - y_lim;
+        // let y_mean =
+        //     (hub.inner_diameter.lower_limit(None) + shaft.outer_diameter.upper_limit(None)) / 2.0;
+        // let y_dev_upper = (y_mean - hub_upper.max(shaft_upper)).abs();
+        // let y_dev_lower = (y_mean - hub_lower.min(shaft_lower)).abs();
+        // let y_lim = 1.5 * y_dev_upper.max(y_dev_lower);
+        // let y_max = y_mean + y_lim;
+        // let y_min = y_mean - y_lim;
+        let y_max_raw = hub
+            .inner_diameter
+            .upper_limit(None)
+            .max(shaft.outer_diameter.upper_limit(None));
+        let y_min_raw = hub
+            .inner_diameter
+            .lower_limit(None)
+            .min(shaft.outer_diameter.lower_limit(None));
+        let y_range_raw = y_max_raw - y_min_raw;
+
+        let padding = y_range_raw / 8.0;
+        let y_max = y_max_raw + padding;
+        let y_min = y_min_raw - padding;
         let y_range = y_max - y_min;
+
         // Account for text margins in x calculation
         // Total plot width = 4*x + 2*text_margin, where text_margin = 1.0*x
         // So total = 4*x + 2*x = 6*x
@@ -1121,15 +1135,15 @@ pub fn fit_display(app: &mut Studio, ui: &mut Ui) {
         };
 
         // --- Optional divider ---
-        let mut div_2 = RedprintComponent::builder("div_2")
-            .cull(false)
-            .style(component_style)
-            .add_path()
-            .point(Point::new(1.45 * x, y_mean))
-            .point(Point::new(2.55 * x, y_mean))
-            .build();
-        div_2.set_stroke_width(0.5);
-        div_2.set_stroke_colour(black);
+        // let mut div_2 = RedprintComponent::builder("div_2")
+        //     .cull(false)
+        //     .style(component_style)
+        //     .add_path()
+        //     .point(Point::new(1.45 * x, y_mean))
+        //     .point(Point::new(2.55 * x, y_mean))
+        //     .build();
+        // div_2.set_stroke_width(0.5);
+        // div_2.set_stroke_colour(black);
 
         // --- Plot ---
         // Add margin for rotated text labels (text height becomes width after rotation)
@@ -1149,20 +1163,6 @@ pub fn fit_display(app: &mut Studio, ui: &mut Ui) {
                 format!("{:.size_dp$} mm", point.y)
             })
             .show(ui, |plot_ui| {
-                // plot_ui.text(
-                //     egui_plot::Text::new(
-                //         "shaft",
-                //         PlotPoint::from(Point::new(-0.1, y_min).to_array()),
-                //         "Shaft",
-                //     )
-                //     .anchor(egui::Align2::LEFT_BOTTOM),
-                // );
-
-                // let painter = ui.painter();
-                // let pos =
-                //     plot_ui.screen_from_plot(PlotPoint::from(Point::new(-0.1, y_min).to_array()));
-                // let angle = std::f32::consts::FRAC_PI_4;
-
                 if let Some(ref comp) = shaft_clearance {
                     render_component(plot_ui, comp, None, None);
                 }
@@ -1179,32 +1179,20 @@ pub fn fit_display(app: &mut Studio, ui: &mut Ui) {
                 render_component(plot_ui, &shaft_rect, None, None);
                 render_component(plot_ui, &hub_rect, None, None);
 
-                // Rotated component name labels along the hatched rectangles
-                // Both rotated -90 degrees from x axis (text reads top to bottom)
-                // Shaft: bottom left of shaft component
-                // Hub: top right of hub component
-                let shaft_label_pos = PlotPoint::new(0.0 * x, y_min);
-                let hub_label_pos = PlotPoint::new(4.0 * x, y_max);
-
-                let shaft_screen_pos = plot_ui.screen_from_plot(shaft_label_pos);
-                let hub_screen_pos = plot_ui.screen_from_plot(hub_label_pos);
-
+                // Rotated component name labels - positioned relative to plot frame (screen coords)
+                // This ensures labels stay fixed even when plot bounds change
+                let plot_rect = plot_ui.transform().frame();
                 let ctx = plot_ui.ctx().clone();
                 let text_color = ctx.style().visuals.text_color();
                 let font_id = egui::FontId::new(13.0, egui::FontFamily::Proportional);
 
-                // Shaft label (rotated -90 degrees, text reads top to bottom)
+                // Shaft label: left side of plot, bottom, rotated -90 degrees
                 let shaft_galley = ctx.fonts_mut(|f| {
                     f.layout_no_wrap(shaft_name.clone(), font_id.clone(), text_color)
                 });
-                let shaft_text_height = shaft_galley.size().y;
-                // After -90° rotation, offset to position at bottom-left of shaft
-                let shaft_adjusted_pos = egui::pos2(
-                    shaft_screen_pos.x - shaft_text_height - 2.0,
-                    shaft_screen_pos.y, // - shaft_text_width,
-                );
+                let shaft_pos = egui::pos2(plot_rect.left() + 2.0, plot_rect.bottom() - 2.0);
                 let shaft_text_shape = egui::epaint::TextShape {
-                    pos: shaft_adjusted_pos,
+                    pos: shaft_pos,
                     galley: shaft_galley,
                     underline: egui::Stroke::NONE,
                     fallback_color: text_color,
@@ -1218,17 +1206,17 @@ pub fn fit_display(app: &mut Studio, ui: &mut Ui) {
                 ))
                 .add(egui::Shape::Text(shaft_text_shape));
 
-                // Hub label (rotated -90 degrees, text reads top to bottom)
+                // Hub label: right side of plot, top, rotated -90 degrees
                 let hub_galley = ctx
                     .fonts_mut(|f| f.layout_no_wrap(hub_name.clone(), font_id.clone(), text_color));
                 let hub_text_width = hub_galley.size().x;
-                // After -90° rotation, offset to position at top-right of hub
-                let hub_adjusted_pos = egui::pos2(
-                    hub_screen_pos.x + 2.0, // - hub_text_height,
-                    hub_screen_pos.y + hub_text_width,
+                let hub_text_height = hub_galley.size().y;
+                let hub_pos = egui::pos2(
+                    plot_rect.right() - hub_text_height - 2.0,
+                    plot_rect.top() + hub_text_width + 2.0,
                 );
                 let hub_text_shape = egui::epaint::TextShape {
-                    pos: hub_adjusted_pos,
+                    pos: hub_pos,
                     galley: hub_galley,
                     underline: egui::Stroke::NONE,
                     fallback_color: text_color,
@@ -1244,3 +1232,7 @@ pub fn fit_display(app: &mut Studio, ui: &mut Ui) {
             });
     }
 }
+
+pub fn temp_input(app: &mut Studio, ui: &mut Ui) {}
+
+pub fn temp_display(app: &mut Studio, ui: &mut Ui) {}

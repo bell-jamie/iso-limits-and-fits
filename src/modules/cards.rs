@@ -3,6 +3,7 @@ use crate::modules::component::Component;
 use crate::modules::component::Focus;
 use crate::modules::feature::Feature;
 use crate::modules::utils::decimals;
+use egui::RichText;
 use egui::{Align, Frame, Grid, Layout, Ui};
 
 /// Wrapper type for component drag payload
@@ -98,7 +99,21 @@ impl CardGrid {
                             CardType::Shaft => app.get_shaft_mut(),
                         };
                         if let Some(component) = component {
-                            component_input_title_bar(ui, component, advanced);
+                            for (focus_val, label) in [
+                                (Focus::Material, "MAT"),
+                                (Focus::Outer, "OD"),
+                                (Focus::Inner, "ID"),
+                            ] {
+                                let selected = component.focus == focus_val;
+                                let button = egui::Button::new(label)
+                                    .selected(selected)
+                                    .frame(true)
+                                    .frame_when_inactive(true);
+
+                                if ui.add_enabled(advanced, button).clicked() {
+                                    component.focus = focus_val;
+                                }
+                            }
                         }
                         let name_mut = match card_type {
                             CardType::Hub => app.get_hub_name_mut(),
@@ -330,26 +345,28 @@ impl CardGrid {
 
     fn fit_display(&self, app: &mut Studio, ui: &mut Ui) {
         Frame::group(ui.style()).show(ui, |ui| {
-            ui.set_width(ui.available_width());
-            ui.set_height(ui.available_height());
-
+            // ui.set_width(ui.available_width());
+            // ui.set_height(ui.available_height());
             crate::modules::plot::fit_display(app, ui);
+        });
+    }
 
-            // let box_1 = egui_plot::BoxPlot::new(
-            //     "hub_box",
-            //     vec![egui_plot::BoxElem::new(
-            //         1.0,
-            //         egui_plot::BoxSpread::new(0.1, 0.2, 0.3, 0.4, 0.5),
-            //     )],
-            // );
-
-            // egui_plot::Plot::new("test")
-            //     .show_axes(false)
-            //     .show_background(false)
-            //     .show_grid(false)
-            //     .show(ui, |plot_ui| {
-            //         plot_ui.box_plot(box_1);
-            //     });
+    fn temp_display(&self, app: &mut Studio, ui: &mut Ui) {
+        Frame::group(ui.style()).show(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.label(RichText::new("Thermal"));
+                ui.with_layout(Layout::right_to_left(Align::Min), |ui| {
+                    if ui.button("➖").clicked() {
+                        app.state.thermal = false;
+                    };
+                });
+            });
+            // ui.set_width(ui.available_width());
+            // ui.set_height(ui.available_height());
+            ui.separator();
+            crate::modules::plot::temp_input(app, ui);
+            ui.separator();
+            crate::modules::plot::temp_display(app, ui);
         });
     }
 
@@ -376,29 +393,13 @@ impl CardGrid {
             ui.vertical(|ui| {
                 ui.set_width(self.card_width / 2.0);
                 self.fit_display(app, ui);
-            })
-            // self.visual // you were working here!
+            });
+            if app.state.thermal {
+                ui.vertical(|ui| {
+                    ui.set_width(self.card_width);
+                    self.temp_display(app, ui);
+                });
+            }
         });
-    }
-}
-
-/// Renders focus buttons for a component title bar.
-/// Called within a right-to-left layout, so buttons are added in reverse order.
-fn component_input_title_bar(ui: &mut Ui, component: &mut Component, advanced: bool) {
-    // Focus buttons in reverse order (right-to-left layout)
-    for (focus_val, label) in [
-        (Focus::Material, "MAT"),
-        (Focus::Outer, "OD"),
-        (Focus::Inner, "ID"),
-    ] {
-        let selected = component.focus == focus_val;
-        let button = egui::Button::new(label)
-            .selected(selected)
-            .frame(true)
-            .frame_when_inactive(true);
-
-        if ui.add_enabled(advanced, button).clicked() {
-            component.focus = focus_val;
-        }
     }
 }
