@@ -1,6 +1,7 @@
 use egui::Ui;
+use redprint::render::egui::View;
 
-#[derive(Clone, serde::Deserialize, serde::Serialize)]
+#[derive(serde::Deserialize, serde::Serialize)]
 pub struct State {
     pub advanced: bool,
     pub debug: bool,
@@ -10,11 +11,17 @@ pub struct State {
     pub sync_temp: bool,
     pub synced_temp: f64,
     pub thermal: bool,
+    pub thermal_split: bool,
+    pub hub_temp_series: Vec<f64>,
+    pub shaft_temp_series: Vec<f64>,
     pub interference: bool,
-    pub zoom: Zoom,
+    pub scale: Scale,
     pub hub_id: usize,
     pub shaft_id: usize,
     pub show_library_panel: bool,
+    pub show_egui_settings: bool,
+    #[serde(skip)]
+    pub temp_view: View,
 }
 
 impl State {
@@ -28,48 +35,54 @@ impl State {
             sync_temp: true,
             synced_temp: 20.0,
             thermal: false,
+            thermal_split: false,
+            hub_temp_series: vec![21.0, 120.0],
+            shaft_temp_series: vec![21.0, 120.0],
             interference: false,
-            zoom: Zoom::default(),
+            scale: Scale::default(),
             hub_id: 0,
             shaft_id: 0,
             show_library_panel: false,
+            show_egui_settings: false,
+            temp_view: View::new(),
         }
     }
 }
 
 #[derive(Clone, serde::Deserialize, serde::Serialize)]
-pub struct Zoom {
+pub struct Scale {
     pub expand: bool,
-    pub scale: f32,
+    pub value: f32,
 }
 
-impl Zoom {
+impl Scale {
     pub fn default() -> Self {
-        Zoom {
+        Scale {
             expand: false,
-            scale: 1.7,
+            value: 1.5,
         }
     }
 
     pub fn show(&mut self, ui: &mut Ui) {
-        ui.toggle_value(&mut self.expand, "🔍")
-            .on_hover_text("Zoom");
+        let (min, max) = (0.5, 3.0);
+        if ui
+            .horizontal(|ui| {
+                ui.toggle_value(&mut self.expand, "🔍")
+                    .on_hover_text("Ui scale");
 
-        let (min_zoom, max_zoom) = (0.5, 3.0);
-
-        // Handles the ui zoom slider
-        if self.expand {
-            ui.label(format!("{:.1}x", self.scale));
-
-            if ui
-                .add(egui::Slider::new(&mut self.scale, min_zoom..=max_zoom).show_value(false))
-                .is_pointer_button_down_on()
-            {
-                return;
-            }
+                if self.expand {
+                    let slider =
+                        ui.add(egui::Slider::new(&mut self.value, min..=max).show_value(false));
+                    if !slider.is_pointer_button_down_on() {
+                        ui.ctx().set_zoom_factor(self.value);
+                    }
+                    ui.label(format!("{:.1}x", self.value));
+                }
+            })
+            .response
+            .clicked_elsewhere()
+        {
+            self.expand = false;
         }
-
-        self.scale = self.scale.clamp(min_zoom, max_zoom);
-        ui.ctx().set_zoom_factor(self.scale);
     }
 }

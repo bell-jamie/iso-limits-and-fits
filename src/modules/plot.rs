@@ -15,12 +15,12 @@ use super::{
 };
 
 use redprint::core::transform::Transform;
-use redprint::core::{Component as RedprintComponent, Path};
+use redprint::core::{Component as RedprintComponent, ConstraintSpec, Path};
 use redprint::core::{
     ComponentStyle, HatchingStyle,
     primitives::{Circle, Point, Segment},
 };
-use redprint::render::egui::render_component;
+use redprint::render::egui::{View, render_component};
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct Style {
@@ -961,9 +961,7 @@ pub fn fit_display(app: &mut Studio, ui: &mut Ui) {
     let ratio = height / width;
 
     if let (Some(hub), Some(shaft)) = (app.get_hub(), app.get_shaft()) {
-        let hub_name = hub.name.clone();
-        let shaft_name = shaft.name.clone();
-
+        // Shorten hub and shaft limit variable names
         let (hub_upper, hub_lower) = (
             hub.inner_diameter.upper_limit(None),
             hub.inner_diameter.lower_limit(None),
@@ -973,22 +971,9 @@ pub fn fit_display(app: &mut Studio, ui: &mut Ui) {
             shaft.outer_diameter.lower_limit(None),
         );
 
-        // Scaling
-        // let y_mean =
-        //     (hub.inner_diameter.lower_limit(None) + shaft.outer_diameter.upper_limit(None)) / 2.0;
-        // let y_dev_upper = (y_mean - hub_upper.max(shaft_upper)).abs();
-        // let y_dev_lower = (y_mean - hub_lower.min(shaft_lower)).abs();
-        // let y_lim = 1.5 * y_dev_upper.max(y_dev_lower);
-        // let y_max = y_mean + y_lim;
-        // let y_min = y_mean - y_lim;
-        let y_max_raw = hub
-            .inner_diameter
-            .upper_limit(None)
-            .max(shaft.outer_diameter.upper_limit(None));
-        let y_min_raw = hub
-            .inner_diameter
-            .lower_limit(None)
-            .min(shaft.outer_diameter.lower_limit(None));
+        // Y scaling and limits
+        let y_max_raw = hub_upper.max(shaft_upper);
+        let y_min_raw = hub_lower.min(shaft_lower);
         let y_range_raw = y_max_raw - y_min_raw;
 
         let padding = y_range_raw / 8.0;
@@ -996,11 +981,26 @@ pub fn fit_display(app: &mut Studio, ui: &mut Ui) {
         let y_min = y_min_raw - padding;
         let y_range = y_max - y_min;
 
-        // Account for text margins in x calculation
-        // Total plot width = 4*x + 2*text_margin, where text_margin = 1.0*x
-        // So total = 4*x + 2*x = 6*x
-        // x_width / ratio = y_range, so x = y_range / (ratio * 6)
-        let x = y_range / (ratio as f64 * 6.0);
+        // Define widths as ratios
+        let text_margin_ratio = 15.0;
+        let pad_width_ratio = 1.0;
+        let comp_width_ratio = 20.0;
+        let zone_width_ratio = 7.0;
+        let width_total_ratio = 2.0 * text_margin_ratio
+            + 5.0 * pad_width_ratio
+            + 2.0 * comp_width_ratio
+            + 2.0 * zone_width_ratio;
+
+        // Convert to plot units
+        let scale = y_range / (ratio as f64 * width_total_ratio);
+        let text_margin = scale * text_margin_ratio;
+        let pad_width = scale * pad_width_ratio;
+        let comp_width = scale * comp_width_ratio;
+        let zone_width = scale * zone_width_ratio;
+        let width_total = scale * width_total_ratio;
+
+        // Running x position, starting after left text margin
+        let mut x = text_margin;
 
         // Hatching
         let hatching_style = HatchingStyle::new(
@@ -1014,43 +1014,10 @@ pub fn fit_display(app: &mut Studio, ui: &mut Ui) {
         let component_style =
             ComponentStyle::new(ui.visuals().text_color().to_array(), 1.0, [0, 0, 0, 0]);
 
-        let shaft_rect = RedprintComponent::builder("shaft_rect")
-            .cull(false)
-            .style(component_style)
-            .hatching(hatching_style)
-            .add_rect_2(Point::new(0.0 * x, y_min), Point::new(1.4 * x, shaft_upper))
-            .chamfer_symmetric("para_0_c", x / 3.0)
-            .close()
-            .build();
-        let hub_rect = RedprintComponent::builder("hub_rect")
-            .cull(false)
-            .style(component_style)
-            .hatching(hatching_style.with_angle_degrees(-45.0))
-            .add_rect_2(Point::new(2.6 * x, y_max), Point::new(4.0 * x, hub_lower))
-            .chamfer_symmetric("para_0_d", x / 3.0)
-            .build();
-
         // Get theme-appropriate colors for fit zones
         let fit_colors = FitZoneColors::from_dark_mode(ui.visuals().dark_mode);
         let blue = fit_colors.clearance;
         let red = fit_colors.interference;
-        let black = [0, 0, 0, 255]; // for lines if needed
-
-        // Zone logic:
-        // - Clearance occurs when shaft < hub (shaft fits inside hole with gap)
-        // - Interference occurs when shaft > hub (shaft larger than hole)
-        //
-        // Zones can overlap to show transition regions (appears purple when both are translucent)
-        //
-        // For shaft column:
-        // - Clearance: shaft sizes that could result in clearance (below hub_upper)
-        // - Interference: shaft sizes that could result in interference (above hub_lower)
-        // - Overlap (transition): between hub_lower and hub_upper
-        //
-        // For hub column:
-        // - Clearance: hub sizes that could result in clearance (above shaft_lower)
-        // - Interference: hub sizes that could result in interference (below shaft_upper)
-        // - Overlap (transition): between shaft_lower and shaft_upper
 
         // --- Shaft zones ---
         // Clearance: shaft sizes that could be smaller than the hub (below hub_upper)
@@ -1063,12 +1030,37 @@ pub fn fit_display(app: &mut Studio, ui: &mut Ui) {
         let shaft_interference_bottom = shaft_lower.max(hub_lower);
         let has_shaft_interference = shaft_interference_top > shaft_interference_bottom;
 
+        // --- Hub zones ---
+        // Clearance: hub sizes that could be larger than the shaft (above shaft_lower)
+        let hub_clearance_top = hub_upper;
+        let hub_clearance_bottom = hub_lower.max(shaft_lower);
+        let has_hub_clearance = hub_clearance_top > hub_clearance_bottom;
+
+        // Interference: hub sizes that could be smaller than the shaft (below shaft_upper)
+        let hub_interference_top = hub_upper.min(shaft_upper);
+        let hub_interference_bottom = hub_lower;
+        let has_hub_interference = hub_interference_top > hub_interference_bottom;
+
+        let shaft_rect = RedprintComponent::builder("shaft_rect")
+            .cull(false)
+            .style(component_style)
+            .hatching(hatching_style)
+            .add_rect_2(
+                Point::new(x, y_min),
+                Point::new(x + comp_width, shaft_upper),
+            )
+            .chamfer_symmetric("para_0_c", comp_width / 3.0)
+            .close()
+            .build();
+
+        x += comp_width + 2.0 * pad_width;
+
         let shaft_clearance = if has_shaft_clearance {
             let mut comp = RedprintComponent::builder("shaft_clearance")
                 .cull(false)
                 .add_rect_2(
-                    Point::new(1.5 * x, shaft_clearance_top),
-                    Point::new(1.95 * x, shaft_clearance_bottom),
+                    Point::new(x, shaft_clearance_top),
+                    Point::new(x + zone_width, shaft_clearance_bottom),
                 )
                 .build();
             comp.set_fill_colour(blue);
@@ -1082,8 +1074,8 @@ pub fn fit_display(app: &mut Studio, ui: &mut Ui) {
             let mut comp = RedprintComponent::builder("shaft_interference")
                 .cull(false)
                 .add_rect_2(
-                    Point::new(1.5 * x, shaft_interference_top),
-                    Point::new(1.95 * x, shaft_interference_bottom),
+                    Point::new(x, shaft_interference_top),
+                    Point::new(x + zone_width, shaft_interference_bottom),
                 )
                 .build();
             comp.set_fill_colour(red);
@@ -1093,23 +1085,14 @@ pub fn fit_display(app: &mut Studio, ui: &mut Ui) {
             None
         };
 
-        // --- Hub zones ---
-        // Clearance: hub sizes that could be larger than the shaft (above shaft_lower)
-        let hub_clearance_top = hub_upper;
-        let hub_clearance_bottom = hub_lower.max(shaft_lower);
-        let has_hub_clearance = hub_clearance_top > hub_clearance_bottom;
-
-        // Interference: hub sizes that could be smaller than the shaft (below shaft_upper)
-        let hub_interference_top = hub_upper.min(shaft_upper);
-        let hub_interference_bottom = hub_lower;
-        let has_hub_interference = hub_interference_top > hub_interference_bottom;
+        x += zone_width + pad_width;
 
         let hub_clearance = if has_hub_clearance {
             let mut comp = RedprintComponent::builder("hub_clearance")
                 .cull(false)
                 .add_rect_2(
-                    Point::new(2.05 * x, hub_clearance_top),
-                    Point::new(2.5 * x, hub_clearance_bottom),
+                    Point::new(x, hub_clearance_top),
+                    Point::new(x + zone_width, hub_clearance_bottom),
                 )
                 .build();
             comp.set_fill_colour(blue);
@@ -1123,8 +1106,8 @@ pub fn fit_display(app: &mut Studio, ui: &mut Ui) {
             let mut comp = RedprintComponent::builder("hub_interference")
                 .cull(false)
                 .add_rect_2(
-                    Point::new(2.05 * x, hub_interference_top),
-                    Point::new(2.5 * x, hub_interference_bottom),
+                    Point::new(x, hub_interference_top),
+                    Point::new(x + zone_width, hub_interference_bottom),
                 )
                 .build();
             comp.set_fill_colour(red);
@@ -1134,30 +1117,28 @@ pub fn fit_display(app: &mut Studio, ui: &mut Ui) {
             None
         };
 
-        // --- Optional divider ---
-        // let mut div_2 = RedprintComponent::builder("div_2")
-        //     .cull(false)
-        //     .style(component_style)
-        //     .add_path()
-        //     .point(Point::new(1.45 * x, y_mean))
-        //     .point(Point::new(2.55 * x, y_mean))
-        //     .build();
-        // div_2.set_stroke_width(0.5);
-        // div_2.set_stroke_colour(black);
+        x += zone_width + 2.0 * pad_width;
 
-        // --- Plot ---
-        // Add margin for rotated text labels (text height becomes width after rotation)
-        let text_margin = x * 1.0;
+        let hub_rect = RedprintComponent::builder("hub_rect")
+            .cull(false)
+            .style(component_style)
+            .hatching(hatching_style.with_angle_degrees(-45.0))
+            .add_rect_2(Point::new(x, y_max), Point::new(x + comp_width, hub_lower))
+            .chamfer_symmetric("para_0_d", comp_width / 3.0)
+            .build();
 
         Plot::new("fit_display")
+            .allow_drag(false)
             .allow_scroll(false)
             .allow_zoom(false)
+            .allow_boxed_zoom(false)
             .show_axes(false)
             .show_background(false)
+            .set_margin_fraction(egui::vec2(0.0, 0.005))
             .show_grid(false)
             .show_x(false)
-            .include_x(-text_margin)
-            .include_x(4.0 * x + text_margin)
+            .include_x(0.0)
+            .include_x(width_total)
             .label_formatter(|_name, point| {
                 let size_dp = dynamic_precision(point.y, 4);
                 format!("{:.size_dp$} mm", point.y)
@@ -1175,7 +1156,6 @@ pub fn fit_display(app: &mut Studio, ui: &mut Ui) {
                 if let Some(ref comp) = hub_interference {
                     render_component(plot_ui, comp, None, None);
                 }
-                // render_component(plot_ui, &div_2, None, None);
                 render_component(plot_ui, &shaft_rect, None, None);
                 render_component(plot_ui, &hub_rect, None, None);
 
@@ -1188,7 +1168,7 @@ pub fn fit_display(app: &mut Studio, ui: &mut Ui) {
 
                 // Shaft label: left side of plot, bottom, rotated -90 degrees
                 let shaft_galley = ctx.fonts_mut(|f| {
-                    f.layout_no_wrap(shaft_name.clone(), font_id.clone(), text_color)
+                    f.layout_no_wrap(shaft.name.clone(), font_id.clone(), text_color)
                 });
                 let shaft_pos = egui::pos2(plot_rect.left() + 2.0, plot_rect.bottom() - 2.0);
                 let shaft_text_shape = egui::epaint::TextShape {
@@ -1201,14 +1181,14 @@ pub fn fit_display(app: &mut Studio, ui: &mut Ui) {
                     angle: -std::f32::consts::FRAC_PI_2,
                 };
                 ctx.layer_painter(egui::LayerId::new(
-                    egui::Order::Foreground,
+                    egui::Order::Background,
                     egui::Id::new("shaft_label"),
                 ))
                 .add(egui::Shape::Text(shaft_text_shape));
 
                 // Hub label: right side of plot, top, rotated -90 degrees
                 let hub_galley = ctx
-                    .fonts_mut(|f| f.layout_no_wrap(hub_name.clone(), font_id.clone(), text_color));
+                    .fonts_mut(|f| f.layout_no_wrap(hub.name.clone(), font_id.clone(), text_color));
                 let hub_text_width = hub_galley.size().x;
                 let hub_text_height = hub_galley.size().y;
                 let hub_pos = egui::pos2(
@@ -1225,7 +1205,7 @@ pub fn fit_display(app: &mut Studio, ui: &mut Ui) {
                     angle: -std::f32::consts::FRAC_PI_2,
                 };
                 ctx.layer_painter(egui::LayerId::new(
-                    egui::Order::Foreground,
+                    egui::Order::Background,
                     egui::Id::new("hub_label"),
                 ))
                 .add(egui::Shape::Text(hub_text_shape));
@@ -1233,6 +1213,67 @@ pub fn fit_display(app: &mut Studio, ui: &mut Ui) {
     }
 }
 
-pub fn temp_input(app: &mut Studio, ui: &mut Ui) {}
+pub fn temp_input(app: &mut Studio, ui: &mut Ui) {
+    // Rebuild the view if the number of temperature points changed
+    // We use a single component with one path containing all named points
+    if app.state.temp_view.len() != 1
+        || app
+            .state
+            .temp_view
+            .get(0)
+            .map(|c| c.source_points().len() != app.state.hub_temp_series.len())
+            .unwrap_or(true)
+    {
+        app.state.temp_view = View::new();
 
-pub fn temp_display(app: &mut Studio, ui: &mut Ui) {}
+        // Build a single component with a path containing all temperature points
+        let mut builder = RedprintComponent::builder("hub_temp_curve")
+            .cull(false)
+            .add_path();
+
+        // Add named points and constrain each to its fixed X position
+        for (i, &temp) in app.state.hub_temp_series.iter().enumerate() {
+            let point_name = format!("p{}", i);
+            builder = builder
+                .named_point(&point_name, Point::new(i as f64, temp))
+                .constrain(
+                    format!("fix_x_{}", i),
+                    &[&point_name],
+                    ConstraintSpec::FixedX { x: i as f64 },
+                );
+        }
+
+        app.state.temp_view.add(builder.build());
+    }
+
+    let plot = Plot::new("temp_input")
+        .allow_drag(!app.state.temp_view.is_dragging())
+        .show_grid(true);
+
+    let plot_response = plot.show(ui, |plot_ui| {
+        // Render the single component (line + draggable points)
+        app.state.temp_view.render_all_in(plot_ui);
+    });
+
+    let result = app.state.temp_view.show_interaction(ui, &plot_response);
+
+    if result.changed {
+        // Update hub_temp_series with the new point positions
+        if let Some(comp) = app.state.temp_view.get(0) {
+            for (i, temp) in app.state.hub_temp_series.iter_mut().enumerate() {
+                if let Some(point) = comp.get_point(&format!("p{}", i)) {
+                    *temp = point.y;
+                }
+            }
+        }
+        ui.ctx().request_repaint();
+    }
+}
+
+pub fn temp_display(app: &mut Studio, ui: &mut Ui) {
+    Plot::new("temp_display").show(ui, |plot_ui| {
+        // Should be obvious what I'm doing here...
+        // Keep implementing the new fit graphics
+        // I was also looking into tooltips for clearance/ interference when hovering
+    });
+}

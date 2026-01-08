@@ -61,11 +61,11 @@ fn apply_shared_styling(style: &mut Style) {
 
     style.visuals.widgets.noninteractive.corner_radius = rounding; // frames
     style.visuals.widgets.inactive.corner_radius = rounding_small;
-    style.visuals.widgets.hovered.corner_radius = rounding_small;
+    style.visuals.widgets.hovered.corner_radius = rounding_small; // hovered outline rad
     style.visuals.widgets.active.corner_radius = rounding_small;
-    style.visuals.widgets.open.corner_radius = rounding_small;
-    style.visuals.window_corner_radius = rounding_small;
-    style.visuals.menu_corner_radius = rounding_small; // combo boxes
+    style.visuals.widgets.open.corner_radius = rounding_small; // open combo boxes
+    // style.visuals.window_corner_radius = rounding_small; // unknown
+    style.visuals.menu_corner_radius = rounding_small; // combo box lists
 
     // Ensure buttons always show their frame (background/stroke)
     style.visuals.button_frame = true;
@@ -128,8 +128,7 @@ fn apply_colors(
     // Sets the general background colour and ensure that textboxes are seamless
     style.visuals.panel_fill = background_colour;
     style.visuals.extreme_bg_color = background_colour;
-
-    // style.visuals.window_fill = background_colour;
+    style.visuals.window_fill = background_colour;
     // style.visuals.widgets.noninteractive.bg_fill = Color32::from_rgb(0x3a, 0x3a, 0x3a);
 
     // Interactive widgets: subtle fill

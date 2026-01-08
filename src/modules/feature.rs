@@ -28,7 +28,7 @@ impl Feature {
         Feature {
             hole: true,
             standard: true,
-            enabled: true,
+            enabled: false,
             size: 10.0,
             iso: Iso::new("H", "7"),
             tolerance: Tolerance::new(0.015, 0.0),
@@ -39,7 +39,7 @@ impl Feature {
         Feature {
             hole: false,
             standard: true,
-            enabled: true,
+            enabled: false,
             size: 10.0,
             iso: Iso::new("h", "6"),
             tolerance: Tolerance::new(0.0, -0.009),

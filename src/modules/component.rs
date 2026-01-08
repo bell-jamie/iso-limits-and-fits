@@ -52,14 +52,13 @@ impl Component {
 
     /// Handle automatic size synchronization
     /// `is_hub` determines which feature is primary: inner for hub, outer for shaft
-    pub fn handle_sync(&mut self, state: State, ui: &mut Ui, is_hub: bool) {
+    pub fn handle_sync(&mut self, state: &State, is_hub: bool) {
         if state.sync_size {
             if is_hub {
                 self.inner_diameter.size = state.synced_size;
             } else {
                 self.outer_diameter.size = state.synced_size;
             }
-            ui.ctx().request_repaint();
         }
     }
 

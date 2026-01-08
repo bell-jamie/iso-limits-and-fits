@@ -379,12 +379,17 @@ impl CardGrid {
                 self.component_input(app, ui, CardType::Shaft);
 
                 // Handle size sync after inputs but before fit calculation
-                let state = app.state.clone();
+                let sync_size = app.state.sync_size;
+                let synced_size = app.state.synced_size;
                 if let Some(hub) = app.get_hub_mut() {
-                    hub.handle_sync(state.clone(), ui, true); // is_hub = true
+                    if sync_size {
+                        hub.inner_diameter.size = synced_size;
+                    }
                 }
                 if let Some(shaft) = app.get_shaft_mut() {
-                    shaft.handle_sync(state, ui, false); // is_hub = false
+                    if sync_size {
+                        shaft.outer_diameter.size = synced_size;
+                    }
                 }
 
                 ui.add_space(self.gap);
@@ -396,7 +401,7 @@ impl CardGrid {
             });
             if app.state.thermal {
                 ui.vertical(|ui| {
-                    ui.set_width(self.card_width);
+                    ui.set_width(self.card_width * 2.0);
                     self.temp_display(app, ui);
                 });
             }

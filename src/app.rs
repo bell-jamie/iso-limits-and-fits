@@ -31,13 +31,14 @@ impl Studio {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         theme::install(&cc.egui_ctx);
 
-        // Load previous app state (if any).
-        // Note that you must enable the `persistence` feature for this to work.
-        if let Some(storage) = cc.storage {
-            return eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default();
-        }
+        let app: Self = if let Some(storage) = cc.storage {
+            eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default()
+        } else {
+            Default::default()
+        };
 
-        Default::default()
+        cc.egui_ctx.set_zoom_factor(app.state.scale.value);
+        app
     }
 
     fn show_menu_bar(&mut self, ui: &mut Ui) {
@@ -45,7 +46,7 @@ impl Studio {
             if ui.button("🖹").on_hover_text("Library").clicked() {
                 self.state.show_library_panel = !self.state.show_library_panel;
             };
-            self.state.zoom.show(ui);
+            self.state.scale.show(ui);
 
             egui::widgets::global_theme_preference_switch(ui);
 
@@ -82,11 +83,25 @@ impl Studio {
 
             if self.state.debug {
                 ui.separator();
-
                 ui.label(RichText::new("DEBUG").strong().color(Color32::RED))
                     .on_hover_cursor(CursorIcon::default());
-
                 ui.toggle_value(&mut self.state.force_valid, "Force Valid");
+
+                if ui.button("egui Settings").clicked() {
+                    self.state.show_egui_settings = true;
+                }
+
+                egui::Window::new("Settings")
+                    .id(egui::Id::new("egui_settings"))
+                    .open(&mut self.state.show_egui_settings)
+                    .collapsible(false)
+                    .resizable(true)
+                    .show(ui.ctx(), |ui| {
+                        egui::ScrollArea::vertical().show(ui, |ui| {
+                            let ctx = ui.ctx().clone();
+                            ctx.settings_ui(ui);
+                        });
+                    });
 
                 // if ui.add(Button::new("Random")).clicked() {
                 //     self.state.sync_size = false;
