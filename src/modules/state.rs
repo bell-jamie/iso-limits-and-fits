@@ -8,20 +8,10 @@ pub struct State {
     pub force_valid: bool,
     pub sync_size: bool,
     pub synced_size: f64,
-    pub sync_temp: bool,
-    pub synced_temp: f64,
-    pub thermal: bool,
-    pub thermal_split: bool,
-    pub hub_temp_series: Vec<f64>,
-    pub shaft_temp_series: Vec<f64>,
     pub interference: bool,
     pub scale: Scale,
-    pub hub_id: usize,
-    pub shaft_id: usize,
     pub show_library_panel: bool,
     pub show_egui_settings: bool,
-    #[serde(skip)]
-    pub temp_view: View,
 }
 
 impl State {
@@ -32,19 +22,10 @@ impl State {
             force_valid: false,
             sync_size: true,
             synced_size: 10.0,
-            sync_temp: true,
-            synced_temp: 20.0,
-            thermal: false,
-            thermal_split: false,
-            hub_temp_series: vec![21.0, 120.0],
-            shaft_temp_series: vec![21.0, 120.0],
             interference: false,
             scale: Scale::default(),
-            hub_id: 0,
-            shaft_id: 0,
             show_library_panel: false,
             show_egui_settings: false,
-            temp_view: View::new(),
         }
     }
 }

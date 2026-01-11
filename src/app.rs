@@ -1,27 +1,24 @@
 use crate::modules::{
-    cards::CardGrid, component::Component, fit::Fit, mat_data::material_list, material,
-    material::Material, plot, state, state::State, theme, utils,
+    cards::CardGrid, component::Component, mat_data::material_list, material, material::Material,
+    plot, theme, utils,
 };
+use crate::modules::{library::Library, state::State, thermal::Thermal};
 use egui::{Button, Color32, CursorIcon, RichText, Ui};
 
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)]
 pub struct Studio {
-    pub hub_id: usize,
-    pub shaft_id: usize,
-    pub state: state::State,
-    pub material_library: Vec<Material>,
-    pub component_library: Vec<Component>,
+    pub state: State,
+    pub thermal: Thermal,
+    pub library: Library,
 }
 
 impl Default for Studio {
     fn default() -> Self {
         Self {
-            hub_id: 0,
-            shaft_id: 1,
             state: State::default(),
-            material_library: material_list().into_iter().collect(),
-            component_library: vec![Component::default_hub(), Component::default_shaft()],
+            thermal: Thermal::default(),
+            library: Library::default(),
         }
     }
 }
@@ -53,14 +50,14 @@ impl Studio {
             ui.separator();
 
             // ui.toggle_value(&mut self.state.advanced, "Advanced");
-            if ui
-                .add(Button::selectable(self.state.advanced, "Advanced").frame_when_inactive(true))
-                .clicked()
-            {
-                self.state.advanced = !self.state.advanced;
-            }
+            // if ui
+            //     .add(Button::selectable(self.state.advanced, "Advanced").frame_when_inactive(true))
+            //     .clicked()
+            // {
+            //     self.state.advanced = !self.state.advanced;
+            // }
 
-            ui.toggle_value(&mut self.state.thermal, "Thermal");
+            ui.toggle_value(&mut self.thermal.enabled, "Thermal");
             // if ui.add(Button::selectable(self.state.thermal, "Thermal")).clicked() {
             //     self.state.thermal = !self.state.thermal;
             // }
@@ -74,17 +71,24 @@ impl Studio {
                 .add(Button::new("Reset").frame_when_inactive(true))
                 .clicked()
             {
-                self.hub_id = 0;
-                self.shaft_id = 1;
-                self.state = state::State::default();
-                self.material_library = material_list().into_iter().collect();
-                self.component_library = vec![Component::default_hub(), Component::default_shaft()];
+                self.state = State::default();
+                self.thermal = Thermal::default();
+                self.library = Library::default();
             }
 
             if self.state.debug {
                 ui.separator();
                 ui.label(RichText::new("DEBUG").strong().color(Color32::RED))
                     .on_hover_cursor(CursorIcon::default());
+                if ui
+                    .add(
+                        Button::selectable(self.state.advanced, "Advanced")
+                            .frame_when_inactive(true),
+                    )
+                    .clicked()
+                {
+                    self.state.advanced = !self.state.advanced;
+                }
                 ui.toggle_value(&mut self.state.force_valid, "Force Valid");
 
                 if ui.button("egui Settings").clicked() {
@@ -160,7 +164,7 @@ impl Studio {
         egui::ScrollArea::vertical()
             .auto_shrink([false, false])
             .show(ui, |ui| {
-                crate::modules::library::render(self, ui);
+                self.library.render(ui);
             });
     }
 
@@ -181,58 +185,6 @@ impl Studio {
             .show(ui, |ui| {
                 card_grid.render_cards(self, ui);
             });
-    }
-
-    pub fn get_hub_name(&self) -> Option<&str> {
-        self.component_library
-            .get(self.hub_id)
-            .map(|hub| hub.name.as_str())
-    }
-
-    pub fn get_hub_name_mut(&mut self) -> Option<&mut String> {
-        if let Some(hub) = self.get_hub_mut() {
-            Some(&mut hub.name)
-        } else {
-            None
-        }
-    }
-
-    pub fn get_shaft_name(&self) -> Option<&str> {
-        self.component_library
-            .get(self.shaft_id)
-            .map(|shaft| shaft.name.as_str())
-    }
-
-    pub fn get_shaft_name_mut(&mut self) -> Option<&mut String> {
-        if let Some(shaft) = self.get_shaft_mut() {
-            Some(&mut shaft.name)
-        } else {
-            None
-        }
-    }
-
-    pub fn get_hub(&self) -> Option<&Component> {
-        self.component_library.get(self.hub_id)
-    }
-
-    pub fn get_shaft(&self) -> Option<&Component> {
-        self.component_library.get(self.shaft_id)
-    }
-
-    pub fn get_hub_mut(&mut self) -> Option<&mut Component> {
-        self.component_library.get_mut(self.hub_id)
-    }
-
-    pub fn get_shaft_mut(&mut self) -> Option<&mut Component> {
-        self.component_library.get_mut(self.shaft_id)
-    }
-
-    pub fn get_material(&self, id: usize) -> Option<&Material> {
-        self.material_library.get(id)
-    }
-
-    pub fn get_material_mut(&mut self, id: usize) -> Option<&mut Material> {
-        self.material_library.get_mut(id)
     }
 }
 

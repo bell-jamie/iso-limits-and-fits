@@ -3,7 +3,6 @@ use std::{cmp::Ordering, collections::BTreeSet};
 
 use super::{
     component::Component,
-    fit::Fit,
     plot,
     state::State,
     utils::{self, dynamic_precision},
@@ -44,6 +43,10 @@ impl Eq for Material {}
 
 impl Material {
     pub fn default() -> Self {
+        Self::carbon_steel()
+    }
+
+    pub fn carbon_steel() -> Self {
         Material {
             name: "Carbon Steel".to_owned(),
             temp: 20.0,

@@ -1,4 +1,4 @@
-use egui::{Button, ComboBox, DragValue, Grid, RichText, SelectableLabel, Ui};
+use egui::{Button, ComboBox, DragValue, Grid, RichText, Ui};
 
 use super::{
     material::Material,
@@ -6,12 +6,6 @@ use super::{
     tolerance::{GradesDeviations, Iso, Tolerance},
     utils::{decimals, req_precision},
 };
-
-// #[derive(Clone, serde::Deserialize, serde::Serialize)]
-// pub enum FeatureType {
-//     Hole,
-//     Shaft,
-// }
 
 #[derive(Clone, serde::Deserialize, serde::Serialize)]
 pub struct Feature {
@@ -104,29 +98,16 @@ impl Feature {
     //     }
     // }
 
-    pub fn upper_limit(&self, mat: Option<&Material>) -> f64 {
-        if let Some(material) = mat {
-            self.temp(self.size + self.tolerance.upper, material)
-        } else {
-            self.size + self.tolerance.upper
-        }
+    pub fn upper_limit(&self) -> f64 {
+        self.size + self.tolerance.upper
     }
 
-    pub fn middle_limit(&self, mat: Option<&Material>) -> f64 {
-        (self.upper_limit(mat) + self.lower_limit(mat)) / 2.0
+    pub fn middle_limit(&self) -> f64 {
+        (self.upper_limit() + self.lower_limit()) / 2.0
     }
 
-    pub fn lower_limit(&self, mat: Option<&Material>) -> f64 {
-        if let Some(material) = mat {
-            self.temp(self.size + self.tolerance.lower, material)
-        } else {
-            self.size + self.tolerance.lower
-        }
-    }
-
-    fn temp(&self, size: f64, mat: &Material) -> f64 {
-        let delta_temp = mat.temp - 20.0;
-        size * (1.0 + mat.cte * 0.000_001 * delta_temp)
+    pub fn lower_limit(&self) -> f64 {
+        self.size + self.tolerance.lower
     }
 
     pub fn show(
@@ -146,19 +127,6 @@ impl Feature {
                     self.feature_output_ui(ui, id, None);
                 }
             });
-
-            // if state.thermal {
-            //     egui::Frame::group(ui.style())
-            //         .inner_margin(10.0)
-            //         .rounding(10.0)
-            //         .show(ui, |ui| {
-            //             ui.vertical(|ui| {
-            //                 self.thermal_input_ui(ui, state, mat);
-            //                 self.feature_output_ui(ui, &(id.to_owned() + "_thermal"), Some(mat));
-            //                 // self.thermal_output_ui(ui, id);
-            //             });
-            //         });
-            // }
         });
     }
 
@@ -174,9 +142,9 @@ impl Feature {
         let size_range = if compliment.enabled {
             if self.hole {
                 // prevent zero wall thickness
-                0.0..=compliment.lower_limit(None) - self.tolerance.upper
+                0.0..=compliment.lower_limit() - self.tolerance.upper
             } else {
-                compliment.upper_limit(None) - self.tolerance.lower..=3_150.0
+                compliment.upper_limit() - self.tolerance.lower..=3_150.0
             }
         } else {
             0.0..=3_150.0
@@ -324,9 +292,9 @@ impl Feature {
 
         ui.add_space(5.0);
 
-        let upper_trunc = decimals(self.upper_limit(mat), -1);
-        let middle_trunc = decimals(self.middle_limit(mat), -1);
-        let lower_trunc = decimals(self.lower_limit(mat), -1);
+        let upper_trunc = decimals(self.upper_limit(), -1);
+        let middle_trunc = decimals(self.middle_limit(), -1);
+        let lower_trunc = decimals(self.lower_limit(), -1);
 
         let precision = (req_precision(upper_trunc, -1))
             .max(req_precision(middle_trunc, -1))
@@ -418,91 +386,4 @@ impl Feature {
                 ui.end_row();
             });
     }
-
-    fn thermal_input_ui(&mut self, ui: &mut Ui, state: &mut State, mat: &mut Material) {
-        ui.horizontal(|ui| {
-            if state.sync_temp {
-                mat.temp = state.synced_temp;
-            }
-
-            ui.toggle_value(&mut state.sync_temp, "🔃")
-                .on_hover_text("Sync");
-
-            let temp_drag = ui
-                .add_sized(
-                    [45.0, 18.0],
-                    egui::DragValue::new(&mut mat.temp)
-                        .custom_formatter(|t, _| format!("{t} ºC"))
-                        .custom_parser(|t| {
-                            let to_parse = t
-                                .chars()
-                                .filter(|c| c.is_ascii_digit() || c == &'.' || c == &'-')
-                                .collect::<String>();
-                            to_parse.parse::<f64>().ok()
-                        })
-                        .speed(1.0)
-                        .range(-273.15..=10_000.0)
-                        .min_decimals(1),
-                )
-                .on_hover_text("Temperature");
-
-            if temp_drag.changed() {
-                state.synced_temp = mat.temp;
-            }
-
-            ui.add_sized(
-                [60.0, 18.0],
-                DragValue::new(&mut mat.cte)
-                    .custom_formatter(|e, _| format!("{e:.1} ¹/k")) // /ºC")) ¹/k
-                    .custom_parser(|t| {
-                        let parsed = t
-                            .chars()
-                            .filter(|c| c.is_ascii_digit() || *c == '.' || *c == '-')
-                            .collect::<String>();
-                        parsed.parse::<f64>().ok()
-                    })
-                    .speed(0.1)
-                    .range(0.0..=f64::MAX)
-                    .min_decimals(1),
-            )
-            .on_hover_text("Thermal expansion coefficient");
-
-            if self.hole {
-                if ui
-                    .add_sized([40.0, 18.0], egui::Button::new("Oven"))
-                    .on_hover_text("Set to 170 ºC")
-                    .clicked()
-                {
-                    mat.temp = 170.0;
-                }
-            } else {
-                if ui
-                    .add_sized([40.0, 18.0], egui::Button::new("LN"))
-                    .on_hover_text("Set to -196 ºC")
-                    .clicked()
-                {
-                    mat.temp = -196.0;
-                }
-            }
-        });
-    }
-
-    // fn thermal_output_ui(&mut self, ui: &mut Ui, id: &str) {
-    //     ui.add_space(5.0);
-    //     Grid::new(&(id.to_owned() + "_thermal"))
-    //         .striped(false)
-    //         .show(ui, |ui| {
-    //             ui.label(format!("{}", decimals(self.upper_limit(true), 4)));
-    //             ui.label("mm");
-    //             ui.end_row();
-
-    //             ui.label(format!("{}", decimals(self.middle_limit(true), 4)));
-    //             ui.label("mm");
-    //             ui.end_row();
-
-    //             ui.label(format!("{}", decimals(self.lower_limit(true), 4)));
-    //             ui.label("mm");
-    //             ui.end_row();
-    //         });
-    // }
 }

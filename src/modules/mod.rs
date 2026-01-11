@@ -1,7 +1,7 @@
 pub mod cards;
 pub mod component;
 pub mod feature;
-pub mod fit;
+// pub mod fit;
 pub mod library;
 pub mod lookup;
 pub mod mat_data;
@@ -11,5 +11,6 @@ pub mod plot;
 pub mod shortcuts;
 pub mod state;
 pub mod theme;
+pub mod thermal;
 pub mod tolerance;
 pub mod utils;

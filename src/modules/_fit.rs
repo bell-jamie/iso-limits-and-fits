@@ -56,46 +56,6 @@ impl Fit {
     //     }
     // }
 
-    pub fn show(&self, ui: &mut egui::Ui, state: &State) {
-        let (units, scale) = if self.mmc.abs() < 1.0 && self.lmc.abs() < 1.0 {
-            ("µm", 1_000.0)
-        } else {
-            ("mm", 1.0)
-        };
-
-        ui.horizontal(|ui| {
-            egui::Frame::group(ui.style())
-                .inner_margin(10.0)
-                .corner_radius(10.0)
-                .show(ui, |ui| {
-                    ui.vertical(|ui| {
-                        self.fit_title_ui(ui);
-
-                        ui.add_space(5.0);
-
-                        self.fit_output_ui(ui, units, scale, false);
-                    });
-                });
-
-            if state.thermal {
-                ui.add_space(30.0);
-
-                egui::Frame::group(ui.style())
-                    .inner_margin(10.0)
-                    .corner_radius(10.0)
-                    .show(ui, |ui| {
-                        ui.vertical(|ui| {
-                            ui.label(RichText::new("At Temperature").strong().size(15.0));
-
-                            ui.add_space(5.0);
-
-                            self.fit_output_ui(ui, units, scale, true);
-                        });
-                    });
-            }
-        });
-    }
-
     /// Insert gaussian distribution for statistical tolerancing
     /// Show how the (nominal) fit varies with temperature, two straight lines on
     /// a graph, highlighting the material intersection temperature

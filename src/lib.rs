@@ -1,4 +1,5 @@
-#![warn(clippy::all, rust_2018_idioms)]
+#![allow(dead_code, unused_imports, unused_variables)]
+// #![allow(unused)]
 
 mod app;
 mod modules;

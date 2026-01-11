@@ -5,7 +5,8 @@ pub fn delete_component(ctx: &Context, app: &mut Studio) {
     let pending_delete: Option<usize> = ctx.data(|d| d.get_temp(egui::Id::new("pending_delete")));
     if let Some(idx) = pending_delete {
         let component_name = app
-            .component_library
+            .library
+            .components
             .get(idx)
             .map(|c| c.name.clone())
             .unwrap_or_default();
@@ -28,13 +29,13 @@ pub fn delete_component(ctx: &Context, app: &mut Studio) {
                     ));
                     ui.add_space(10.0);
                     if ui.button("Delete").clicked() {
-                        app.component_library.remove(idx);
+                        app.library.components.remove(idx);
                         // Adjust hub_id and shaft_id if needed
-                        if app.hub_id >= idx && app.hub_id > 0 {
-                            app.hub_id -= 1;
+                        if app.library.hub_id >= idx && app.library.hub_id > 0 {
+                            app.library.hub_id -= 1;
                         }
-                        if app.shaft_id >= idx && app.shaft_id > 0 {
-                            app.shaft_id -= 1;
+                        if app.library.shaft_id >= idx && app.library.shaft_id > 0 {
+                            app.library.shaft_id -= 1;
                         }
                         ctx.data_mut(|d| d.remove::<usize>(egui::Id::new("pending_delete")));
                     }

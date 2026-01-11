@@ -11,7 +11,7 @@ use super::{
     feature::Feature,
     state::State,
     theme::FitZoneColors,
-    utils::{dynamic_precision, text_width},
+    utils::{dynamic_precision, text_width, truncate},
 };
 
 use redprint::core::transform::Transform;
@@ -477,13 +477,13 @@ fn centre_view(
     let right = 0.5 * style.scale * left_component.outer_diameter.size;
     let left = -right;
 
-    let mut p1 = Point::new(
+    let p1 = Point::new(
         left,
-        style.scale * left_component.outer_diameter.middle_limit(None) / 2.0,
+        style.scale * left_component.outer_diameter.middle_limit() / 2.0,
     );
-    let mut p2 = Point::new(
+    let p2 = Point::new(
         right,
-        style.scale * left_component.inner_diameter.middle_limit(None) / 2.0,
+        style.scale * left_component.inner_diameter.middle_limit() / 2.0,
     );
 
     hatched_section(
@@ -508,13 +508,13 @@ fn centre_view(
     ); // lower rect
 
     if right_component.inner_diameter.enabled {
-        let mut p1 = Point::new(
+        let p1 = Point::new(
             left,
-            style.scale * right_component.outer_diameter.middle_limit(None) / 2.0,
+            style.scale * right_component.outer_diameter.middle_limit() / 2.0,
         );
-        let mut p2 = Point::new(
+        let p2 = Point::new(
             right,
-            style.scale * right_component.inner_diameter.middle_limit(None) / 2.0,
+            style.scale * right_component.inner_diameter.middle_limit() / 2.0,
         );
 
         hatched_section(plot_ui, style, -45.0, p1, p2, false); // upper rect
@@ -527,27 +527,26 @@ fn centre_view(
     } else {
         let p1 = Point::new(
             left,
-            style.scale * right_component.outer_diameter.middle_limit(None) / 2.0,
+            style.scale * right_component.outer_diameter.middle_limit() / 2.0,
         );
         let p2 = Point::new(
             right,
-            -style.scale * right_component.outer_diameter.middle_limit(None) / 2.0,
+            -style.scale * right_component.outer_diameter.middle_limit() / 2.0,
         );
 
         hatched_section(plot_ui, style, -45.0, p1, p2, false);
     }
 
     // Interference
-    if left_component.inner_diameter.middle_limit(None)
-        < right_component.outer_diameter.middle_limit(None)
+    if left_component.inner_diameter.middle_limit() < right_component.outer_diameter.middle_limit()
     {
         let p1 = Point::new(
             left,
-            0.5 * style.scale * right_component.outer_diameter.middle_limit(None),
+            0.5 * style.scale * right_component.outer_diameter.middle_limit(),
         );
         let p2 = Point::new(
             right,
-            0.5 * style.scale * left_component.inner_diameter.middle_limit(None),
+            0.5 * style.scale * left_component.inner_diameter.middle_limit(),
         );
 
         let mut upper_interference = RedprintComponent::builder("upper_interference")
@@ -598,14 +597,7 @@ fn centre_view(
     plot_centreline(plot_ui, style, centre, right, 0.0);
 }
 
-fn hatched_section(
-    ui: &mut PlotUi,
-    style: &Style,
-    mut angle: f64,
-    p1: Point,
-    p2: Point,
-    broken: bool,
-) {
+fn hatched_section(ui: &mut PlotUi, style: &Style, angle: f64, p1: Point, p2: Point, broken: bool) {
     // TODO: redprint missing - This function needs:
     // 1. Rectangle geometry with offset, centre(), and path access
     // 2. Path segments() method
@@ -703,12 +695,12 @@ fn diameter_limits(
     let h_pad = 3.5; // text horizontal padding
     let extension = 1.5; // arrow line horizontal extension
     let text_size = 13.0 * zoom;
-    let nominal_diameter = style.scale * feature.middle_limit(None);
+    let nominal_diameter = style.scale * feature.middle_limit();
 
     // Format the upper and lower limit text strings.
     let (upper_text, lower_text) = (
-        format!("{:.3}", feature.upper_limit(None)),
-        format!("{:.3}", feature.lower_limit(None)),
+        format!("{:.3}", feature.upper_limit()),
+        format!("{:.3}", feature.lower_limit()),
     );
 
     let mut knee = position; // Implicit copy
@@ -960,15 +952,15 @@ pub fn fit_display(app: &mut Studio, ui: &mut Ui) {
     let height = ui.available_height();
     let ratio = height / width;
 
-    if let (Some(hub), Some(shaft)) = (app.get_hub(), app.get_shaft()) {
+    if let (Some(hub), Some(shaft)) = (app.library.get_hub(), app.library.get_shaft()) {
         // Shorten hub and shaft limit variable names
         let (hub_upper, hub_lower) = (
-            hub.inner_diameter.upper_limit(None),
-            hub.inner_diameter.lower_limit(None),
+            hub.inner_diameter.upper_limit(),
+            hub.inner_diameter.lower_limit(),
         );
         let (shaft_upper, shaft_lower) = (
-            shaft.outer_diameter.upper_limit(None),
-            shaft.outer_diameter.lower_limit(None),
+            shaft.outer_diameter.upper_limit(),
+            shaft.outer_diameter.lower_limit(),
         );
 
         // Y scaling and limits
@@ -1168,7 +1160,7 @@ pub fn fit_display(app: &mut Studio, ui: &mut Ui) {
 
                 // Shaft label: left side of plot, bottom, rotated -90 degrees
                 let shaft_galley = ctx.fonts_mut(|f| {
-                    f.layout_no_wrap(shaft.name.clone(), font_id.clone(), text_color)
+                    f.layout_no_wrap(truncate(&shaft.name, 20), font_id.clone(), text_color)
                 });
                 let shaft_pos = egui::pos2(plot_rect.left() + 2.0, plot_rect.bottom() - 2.0);
                 let shaft_text_shape = egui::epaint::TextShape {
@@ -1187,8 +1179,9 @@ pub fn fit_display(app: &mut Studio, ui: &mut Ui) {
                 .add(egui::Shape::Text(shaft_text_shape));
 
                 // Hub label: right side of plot, top, rotated -90 degrees
-                let hub_galley = ctx
-                    .fonts_mut(|f| f.layout_no_wrap(hub.name.clone(), font_id.clone(), text_color));
+                let hub_galley = ctx.fonts_mut(|f| {
+                    f.layout_no_wrap(truncate(&hub.name, 20), font_id.clone(), text_color)
+                });
                 let hub_text_width = hub_galley.size().x;
                 let hub_text_height = hub_galley.size().y;
                 let hub_pos = egui::pos2(
@@ -1211,69 +1204,4 @@ pub fn fit_display(app: &mut Studio, ui: &mut Ui) {
                 .add(egui::Shape::Text(hub_text_shape));
             });
     }
-}
-
-pub fn temp_input(app: &mut Studio, ui: &mut Ui) {
-    // Rebuild the view if the number of temperature points changed
-    // We use a single component with one path containing all named points
-    if app.state.temp_view.len() != 1
-        || app
-            .state
-            .temp_view
-            .get(0)
-            .map(|c| c.source_points().len() != app.state.hub_temp_series.len())
-            .unwrap_or(true)
-    {
-        app.state.temp_view = View::new();
-
-        // Build a single component with a path containing all temperature points
-        let mut builder = RedprintComponent::builder("hub_temp_curve")
-            .cull(false)
-            .add_path();
-
-        // Add named points and constrain each to its fixed X position
-        for (i, &temp) in app.state.hub_temp_series.iter().enumerate() {
-            let point_name = format!("p{}", i);
-            builder = builder
-                .named_point(&point_name, Point::new(i as f64, temp))
-                .constrain(
-                    format!("fix_x_{}", i),
-                    &[&point_name],
-                    ConstraintSpec::FixedX { x: i as f64 },
-                );
-        }
-
-        app.state.temp_view.add(builder.build());
-    }
-
-    let plot = Plot::new("temp_input")
-        .allow_drag(!app.state.temp_view.is_dragging())
-        .show_grid(true);
-
-    let plot_response = plot.show(ui, |plot_ui| {
-        // Render the single component (line + draggable points)
-        app.state.temp_view.render_all_in(plot_ui);
-    });
-
-    let result = app.state.temp_view.show_interaction(ui, &plot_response);
-
-    if result.changed {
-        // Update hub_temp_series with the new point positions
-        if let Some(comp) = app.state.temp_view.get(0) {
-            for (i, temp) in app.state.hub_temp_series.iter_mut().enumerate() {
-                if let Some(point) = comp.get_point(&format!("p{}", i)) {
-                    *temp = point.y;
-                }
-            }
-        }
-        ui.ctx().request_repaint();
-    }
-}
-
-pub fn temp_display(app: &mut Studio, ui: &mut Ui) {
-    Plot::new("temp_display").show(ui, |plot_ui| {
-        // Should be obvious what I'm doing here...
-        // Keep implementing the new fit graphics
-        // I was also looking into tooltips for clearance/ interference when hovering
-    });
 }
