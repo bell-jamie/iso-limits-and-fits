@@ -92,9 +92,9 @@ impl Library {
             // Calculate available width for name (panel width minus buttons and spacing)
             // Buttons: H, S, delete (if >2) ~ 60px, plus spacing ~20px
             let buttons_width = if self.components.len() > 2 {
-                80.0
+                50.0
             } else {
-                60.0
+                30.0
             };
             let name_width = (ui.available_width() - buttons_width).max(40.0);
             let ctx = ui.ctx().clone();
@@ -160,7 +160,7 @@ impl Library {
             let mut new_shaft_mat_id = self.get_shaft().map(|shaft| shaft.material_id);
 
             // Calculate available width for name (panel width minus buttons and spacing)
-            let buttons_width = if self.materials.len() > 2 { 80.0 } else { 60.0 };
+            let buttons_width = if self.materials.len() > 2 { 50.0 } else { 30.0 };
             let name_width = (ui.available_width() - buttons_width).max(40.0);
             let ctx = ui.ctx().clone();
 

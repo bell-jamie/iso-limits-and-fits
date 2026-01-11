@@ -213,6 +213,7 @@ impl eframe::App for Studio {
         if self.state.show_library_panel {
             egui::SidePanel::left("library_panel")
                 .default_width(250.0)
+                .min_width(150.0)
                 .resizable(true)
                 .show(ctx, |ui| {
                     self.show_library_panel(ui);
