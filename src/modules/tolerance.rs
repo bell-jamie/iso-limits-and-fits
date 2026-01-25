@@ -1,12 +1,12 @@
 use super::{
     lookup::{
-        DELTA, DEVIATIONS_A_G, DEVIATIONS_K_ZC, DEVIATION_MAP, GRADE_MAP, LOWER_J,
+        DELTA, DEVIATION_MAP, DEVIATIONS_A_G, DEVIATIONS_K_ZC, GRADE_MAP, LOWER_J,
         STANDARD_TOLERANCE_GRADES, UPPER_J,
     },
-    utils::decimals,
+    utils::SanitiseFloat,
 };
 
-#[derive(Clone, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Default, serde::Deserialize, serde::Serialize)]
 pub struct Tolerance {
     pub upper: f64,
     pub lower: f64,
@@ -21,10 +21,10 @@ impl Tolerance {
         self.upper - (self.upper + self.lower) / 2.0
     }
 
-    pub fn round(&mut self, n: i32) {
-        self.upper = decimals(self.upper, n);
-        self.lower = decimals(self.lower, n);
-    }
+    // pub fn sanitise(&mut self, n: i32) {
+    //     self.upper = sanitise_f64(self.upper, n);
+    //     self.lower = sanitise_f64(self.lower, n);
+    // }
 }
 
 pub struct GradesDeviations {
@@ -55,7 +55,7 @@ impl GradesDeviations {
     }
 }
 
-#[derive(Clone, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Default, serde::Deserialize, serde::Serialize)]
 pub struct Iso {
     pub deviation: String,
     pub grade: String,
@@ -274,8 +274,9 @@ mod tests {
 
         for test in test_vec.iter() {
             if let (Some(iso), Some(bilateral)) = test {
-                assert_eq!(decimals(iso.upper, 4), decimals(bilateral.upper, 4));
-                assert_eq!(decimals(iso.lower, 4), decimals(bilateral.lower, 4));
+                assert_eq!(iso.upper.sanitise(4), bilateral.upper.sanitise(4),);
+
+                assert_eq!(iso.lower.sanitise(4), bilateral.lower.sanitise(4),);
             }
         }
     }

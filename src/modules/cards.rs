@@ -1,7 +1,8 @@
 use crate::Studio;
 use crate::modules::component::Focus;
+use crate::modules::feature::show_feature;
 use crate::modules::material::Material;
-use crate::modules::utils::{at_temp, decimals, format_temp, parse_temp, truncate};
+use crate::modules::utils::{at_temp, fix_dp, format_temp, parse_temp, truncate_string};
 use egui::{Align, Frame, Grid, Layout, Ui};
 use egui::{DragValue, RichText};
 
@@ -36,25 +37,38 @@ impl Default for CardGrid {
 }
 
 impl CardGrid {
+    /// Renders a component input card (hub or shaft).
+    ///
+    /// Follows the extract-then-mutate pattern to handle borrow checker constraints
+    /// when Feature::show needs both &mut self and &mut Studio.
     fn component_input(&self, app: &mut Studio, ui: &mut Ui, card_type: CardType) {
-        let (name, component_id) = match card_type {
-            CardType::Hub => (
-                truncate(app.library.get_hub_name().unwrap_or("Hub"), 10),
-                app.library.hub_id,
-            ),
-            CardType::Shaft => (
-                truncate(app.library.get_shaft_name().unwrap_or("Shaft"), 10),
-                app.library.shaft_id,
-            ),
-        };
-        let advanced = app.state.advanced;
-        let card_id = match card_type {
-            CardType::Hub => "hub_card",
-            CardType::Shaft => "shaft_card",
+        // EXTRACT: Gather all data needed from app
+        let (name, component_id, advanced, card_id, is_hub) = {
+            let (name, id) = match card_type {
+                CardType::Hub => (
+                    truncate_string(app.library.get_hub_name().unwrap_or("Hub"), 10),
+                    app.library.hub_id,
+                ),
+                CardType::Shaft => (
+                    truncate_string(app.library.get_shaft_name().unwrap_or("Shaft"), 10),
+                    app.library.shaft_id,
+                ),
+            };
+            let card_id = match card_type {
+                CardType::Hub => "hub_card",
+                CardType::Shaft => "shaft_card",
+            };
+            (
+                name,
+                id,
+                app.state.advanced,
+                card_id,
+                matches!(card_type, CardType::Hub),
+            )
         };
 
-        // Extract data we need before mutable borrow
-        let (focus, material_id, compliment) = {
+        // EXTRACT: Get component data and handle auto-scale
+        let (focus, compliment) = {
             let component = match card_type {
                 CardType::Hub => app.library.get_hub_mut(),
                 CardType::Shaft => app.library.get_shaft_mut(),
@@ -67,7 +81,6 @@ impl CardGrid {
             component.handle_auto_scale(ui);
 
             // If not in advanced mode, force focus to primary feature
-            // Hub's primary feature is inner diameter, shaft's is outer diameter
             if !advanced {
                 component.focus = match card_type {
                     CardType::Hub => Focus::Inner,
@@ -76,130 +89,159 @@ impl CardGrid {
             }
 
             let focus = component.focus.clone();
-            let material_id = component.material_id;
             let compliment = match focus {
                 Focus::Inner => component.outer_diameter.clone(),
                 Focus::Outer => component.inner_diameter.clone(),
-                Focus::Material => component.inner_diameter.clone(), // not used
             };
-            (focus, material_id, compliment)
+            (focus, compliment)
         };
 
-        // Check if we're dragging a component or material over this card
+        // Check drag state before rendering
         let is_being_dragged = egui::DragAndDrop::has_payload_of_type::<ComponentDrag>(ui.ctx())
             || egui::DragAndDrop::has_payload_of_type::<MaterialDrag>(ui.ctx());
         let frame = Frame::group(ui.style());
 
+        // RENDER: Main card frame
         let frame_response = frame.show(ui, |ui| {
             ui.push_id(card_id, |ui| {
                 ui.set_width(ui.available_width());
-                // Title bar
-                ui.horizontal(|ui| {
-                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                        let component = match card_type {
-                            CardType::Hub => app.library.get_hub_mut(),
-                            CardType::Shaft => app.library.get_shaft_mut(),
-                        };
-                        if let Some(component) = component {
-                            for (focus_val, label) in [
-                                (Focus::Material, "MAT"),
-                                (Focus::Outer, "OD"),
-                                (Focus::Inner, "ID"),
-                            ] {
-                                let selected = component.focus == focus_val;
-                                let button = egui::Button::new(label)
-                                    .selected(selected)
-                                    .frame(true)
-                                    .frame_when_inactive(true);
 
-                                if ui.add_enabled(advanced, button).clicked() {
-                                    component.focus = focus_val;
-                                }
-                            }
-                        }
-                        let name_mut = match card_type {
-                            CardType::Hub => app.library.get_hub_name_mut(),
-                            CardType::Shaft => app.library.get_shaft_name_mut(),
-                        };
-                        if let Some(name) = name_mut {
-                            ui.text_edit_singleline(name);
-                        }
-                    });
-                });
+                // Title bar with focus buttons and name input
+                self.component_input_title_bar(app, ui, card_type, advanced);
                 ui.separator();
 
                 // Content based on focus
-                // is_primary: hub's inner is primary, shaft's outer is primary
-                let is_hub = matches!(card_type, CardType::Hub);
-                match focus {
-                    Focus::Inner => {
-                        let is_primary = is_hub; // inner is primary for hub
-                        if let Some(component) = app.library.components.get_mut(component_id) {
-                            // Primary features are always enabled
-                            if is_primary {
-                                component.inner_diameter.enabled = true;
-                            }
-                            component.inner_diameter.show(
-                                ui,
-                                &mut app.state,
-                                &name,
-                                &compliment,
-                                is_primary,
-                            );
-                        }
-                    }
-                    Focus::Outer => {
-                        let is_primary = !is_hub; // outer is primary for shaft
-                        if let Some(component) = app.library.components.get_mut(component_id) {
-                            // Primary features are always enabled
-                            if is_primary {
-                                component.outer_diameter.enabled = true;
-                            }
-                            component.outer_diameter.show(
-                                ui,
-                                &mut app.state,
-                                &name,
-                                &compliment,
-                                is_primary,
-                            );
-                        }
-                    }
-                    Focus::Material => {
-                        if let Some(mat) = app.library.materials.get_mut(material_id) {
-                            mat.input(ui, &mut Default::default(), &name);
-                        }
-                    }
-                }
+                self.component_input_content(
+                    app,
+                    ui,
+                    &focus,
+                    component_id,
+                    &name,
+                    &compliment,
+                    is_hub,
+                );
             });
         });
 
         // Highlight when dragging over
         if is_being_dragged {
-            let rect = frame_response.response.rect;
-            if let Some(pointer_pos) = ui.ctx().pointer_hover_pos() {
-                if rect.contains(pointer_pos) {
-                    let stroke = egui::Stroke::new(1.5, ui.visuals().selection.bg_fill);
-                    ui.painter().rect_stroke(
-                        rect,
-                        frame.corner_radius,
-                        stroke,
-                        egui::StrokeKind::Outside,
-                    );
+            self.component_input_drag_highlight(ui, &frame_response.response, &frame);
+        }
+
+        // Handle drag-and-drop payload release
+        self.component_input_dnd_release(app, ui, card_type, &frame_response.response);
+    }
+
+    /// Renders the component input title bar with focus buttons and name input.
+    fn component_input_title_bar(
+        &self,
+        app: &mut Studio,
+        ui: &mut Ui,
+        card_type: CardType,
+        advanced: bool,
+    ) {
+        ui.horizontal(|ui| {
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                // Focus buttons (OD, ID)
+                if let Some(component) = match card_type {
+                    CardType::Hub => app.library.get_hub_mut(),
+                    CardType::Shaft => app.library.get_shaft_mut(),
+                } {
+                    for (focus_val, label) in [(Focus::Outer, "OD"), (Focus::Inner, "ID")] {
+                        let selected = component.focus == focus_val;
+                        let button = egui::Button::new(label)
+                            .selected(selected)
+                            .frame(true)
+                            .frame_when_inactive(true);
+
+                        if ui.add_enabled(advanced, button).clicked() {
+                            component.focus = focus_val;
+                        }
+                    }
+                }
+
+                // Name input
+                if let Some(name) = match card_type {
+                    CardType::Hub => app.library.get_hub_name_mut(),
+                    CardType::Shaft => app.library.get_shaft_name_mut(),
+                } {
+                    ui.text_edit_singleline(name);
+                }
+            });
+        });
+    }
+
+    /// Renders the component input card content based on the current focus.
+    fn component_input_content(
+        &self,
+        app: &mut Studio,
+        ui: &mut Ui,
+        focus: &Focus,
+        component_id: usize,
+        name: &str,
+        compliment: &crate::modules::feature::Feature,
+        is_hub: bool,
+    ) {
+        let is_primary = match focus {
+            Focus::Inner => is_hub,
+            Focus::Outer => !is_hub,
+        };
+
+        // Enable primary features
+        if is_primary {
+            match focus {
+                Focus::Inner => {
+                    app.library.components[component_id].inner_diameter.enabled = true;
+                }
+                Focus::Outer => {
+                    app.library.components[component_id].outer_diameter.enabled = true;
                 }
             }
         }
 
-        // Check payload type first, then consume only the matching one
-        // dnd_release_payload consumes the payload, so we must check type before calling it
+        // Use free function with split borrows to avoid borrow conflicts
+        let Studio { state, library, .. } = app;
+        let feature = match focus {
+            Focus::Inner => &mut library.components[component_id].inner_diameter,
+            Focus::Outer => &mut library.components[component_id].outer_diameter,
+        };
+        show_feature(feature, state, ui, name, compliment, is_primary);
+    }
+
+    /// Renders the drag highlight when hovering over a component input card.
+    fn component_input_drag_highlight(
+        &self,
+        ui: &mut Ui,
+        response: &egui::Response,
+        frame: &Frame,
+    ) {
+        let rect = response.rect;
+        if let Some(pointer_pos) = ui.ctx().pointer_hover_pos() {
+            if rect.contains(pointer_pos) {
+                let stroke = egui::Stroke::new(1.5, ui.visuals().selection.bg_fill);
+                ui.painter().rect_stroke(
+                    rect,
+                    frame.corner_radius,
+                    stroke,
+                    egui::StrokeKind::Outside,
+                );
+            }
+        }
+    }
+
+    /// Handles drag-and-drop payload release for component input cards.
+    fn component_input_dnd_release(
+        &self,
+        app: &mut Studio,
+        ui: &mut Ui,
+        card_type: CardType,
+        response: &egui::Response,
+    ) {
         let is_component_drag = egui::DragAndDrop::has_payload_of_type::<ComponentDrag>(ui.ctx());
         let is_material_drag = egui::DragAndDrop::has_payload_of_type::<MaterialDrag>(ui.ctx());
 
         if is_component_drag {
-            if let Some(payload) = frame_response
-                .response
-                .dnd_release_payload::<ComponentDrag>()
-            {
-                // Prevent the same component from being used as both hub and shaft
+            if let Some(payload) = response.dnd_release_payload::<ComponentDrag>() {
                 match card_type {
                     CardType::Hub => {
                         if payload.0 != app.library.shaft_id {
@@ -214,10 +256,7 @@ impl CardGrid {
                 }
             }
         } else if is_material_drag {
-            if let Some(payload) = frame_response
-                .response
-                .dnd_release_payload::<MaterialDrag>()
-            {
+            if let Some(payload) = response.dnd_release_payload::<MaterialDrag>() {
                 match card_type {
                     CardType::Hub => {
                         if let Some(hub) = app.library.get_hub_mut() {
@@ -324,21 +363,21 @@ impl CardGrid {
                     ui.label("🌑")
                         .on_hover_cursor(egui::CursorIcon::Default)
                         .on_hover_text("Max material condition");
-                    ui.label(format!("{:.} {units}", decimals(scale * mmc.abs(), 1)));
+                    ui.label(format!("{:.} {units}", fix_dp(scale * mmc.abs(), 1)));
                     ui.label(mmc_type);
                     ui.end_row();
 
                     ui.label("🌓")
                         .on_hover_cursor(egui::CursorIcon::Default)
                         .on_hover_text("Mid limits");
-                    ui.label(format!("{:.} {units}", decimals(scale * mid.abs(), 1)));
+                    ui.label(format!("{:.} {units}", fix_dp(scale * mid.abs(), 1)));
                     ui.label(mid_type);
                     ui.end_row();
 
                     ui.label("🌕")
                         .on_hover_cursor(egui::CursorIcon::Default)
-                        .on_hover_text("Min material condition");
-                    ui.label(format!("{:.} {units}", decimals(scale * lmc.abs(), 1)));
+                        .on_hover_text("Least material condition");
+                    ui.label(format!("{:.} {units}", fix_dp(scale * lmc.abs(), 1)));
                     ui.label(lmc_type);
                     ui.end_row();
                 });
@@ -358,12 +397,12 @@ impl CardGrid {
         let hub_name = app
             .library
             .get_hub()
-            .map(|h| truncate(&h.name, 12))
+            .map(|h| truncate_string(&h.name, 12))
             .unwrap_or_else(|| "Hub".to_string());
         let shaft_name = app
             .library
             .get_shaft()
-            .map(|s| truncate(&s.name, 12))
+            .map(|s| truncate_string(&s.name, 12))
             .unwrap_or_else(|| "Shaft".to_string());
 
         Frame::group(ui.style()).show(ui, |ui| {
@@ -442,13 +481,20 @@ impl CardGrid {
 
                 // Intersection toggles
                 ui.vertical(|ui| {
-                    ui.label(RichText::new("Intersections").strong());
-                    ui.checkbox(&mut app.thermal.show_limit_intersections, "Limit lines");
+                    ui.label(RichText::new("Component Intersections").strong());
                     ui.checkbox(
-                        &mut app.thermal.show_mid_limit_intersections,
-                        "Mid limit lines",
+                        &mut app.thermal.show_component_limit_intersections,
+                        "Limits",
                     );
-                    ui.checkbox(&mut app.thermal.show_at_temp_intersections, "At temp");
+                    ui.checkbox(
+                        &mut app.thermal.show_component_mid_intersections,
+                        "Mid-limits",
+                    );
+                });
+                ui.vertical(|ui| {
+                    ui.label(RichText::new("Temperature Intersections").strong());
+                    ui.checkbox(&mut app.thermal.show_temp_limit_intersections, "Limits");
+                    ui.checkbox(&mut app.thermal.show_temp_mid_intersections, "Mid-limits");
                 });
             });
 
@@ -512,30 +558,21 @@ impl CardGrid {
                                     ui.label("🌑")
                                         .on_hover_cursor(egui::CursorIcon::Default)
                                         .on_hover_text("Max material condition");
-                                    ui.label(format!(
-                                        "{:.} {units}",
-                                        decimals(scale * mmc.abs(), 1)
-                                    ));
+                                    ui.label(format!("{:.} {units}", fix_dp(scale * mmc.abs(), 1)));
                                     ui.label(condition(mmc));
                                     ui.end_row();
 
                                     ui.label("🌓")
                                         .on_hover_cursor(egui::CursorIcon::Default)
                                         .on_hover_text("Mid limits");
-                                    ui.label(format!(
-                                        "{:.} {units}",
-                                        decimals(scale * mid.abs(), 1)
-                                    ));
+                                    ui.label(format!("{:.} {units}", fix_dp(scale * mid.abs(), 1)));
                                     ui.label(condition(mid));
                                     ui.end_row();
 
                                     ui.label("🌕")
                                         .on_hover_cursor(egui::CursorIcon::Default)
-                                        .on_hover_text("Min material condition");
-                                    ui.label(format!(
-                                        "{:.} {units}",
-                                        decimals(scale * lmc.abs(), 1)
-                                    ));
+                                        .on_hover_text("Least material condition");
+                                    ui.label(format!("{:.} {units}", fix_dp(scale * lmc.abs(), 1)));
                                     ui.label(condition(lmc));
                                     ui.end_row();
                                 });

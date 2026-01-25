@@ -1,13 +1,14 @@
 use crate::modules::{
     cards::CardGrid, component::Component, mat_data::material_list, material, material::Material,
-    plot, theme, utils,
+    material::show_material_editor, plot, theme, utils,
 };
-use crate::modules::{library::Library, state::State, thermal::Thermal};
+use crate::modules::{library::Library, settings::Settings, state::State, thermal::Thermal};
 use egui::{Button, Color32, CursorIcon, RichText, Ui};
 
 #[derive(serde::Deserialize, serde::Serialize)]
-#[serde(default)]
+// #[serde(default)]
 pub struct Studio {
+    pub settings: Settings,
     pub state: State,
     pub thermal: Thermal,
     pub library: Library,
@@ -16,6 +17,7 @@ pub struct Studio {
 impl Default for Studio {
     fn default() -> Self {
         Self {
+            settings: Settings::default(),
             state: State::default(),
             thermal: Thermal::default(),
             library: Library::default(),
@@ -158,13 +160,14 @@ impl Studio {
 
     fn show_library_panel(&mut self, ui: &mut egui::Ui) {
         ui.add_space(5.0);
-        ui.heading("Library");
+        ui.heading(RichText::new("Library").strong());
         ui.separator();
 
+        let Self { state, library, .. } = self;
         egui::ScrollArea::vertical()
             .auto_shrink([false, false])
             .show(ui, |ui| {
-                self.library.render(ui);
+                library.render(state, ui);
             });
     }
 
@@ -201,6 +204,12 @@ impl eframe::App for Studio {
         crate::modules::shortcuts::inputs(ctx, self);
 
         crate::modules::modal::delete_component(ctx, self);
+        crate::modules::modal::delete_material(ctx, self);
+
+        // Material editor window
+        if self.state.show_material_editor {
+            show_material_editor(self, ctx);
+        }
 
         egui::TopBottomPanel::bottom("status_bar").show(ctx, |ui| {
             self.show_status_bar(ui);
@@ -222,53 +231,6 @@ impl eframe::App for Studio {
 
         egui::CentralPanel::default().show(ctx, |ui| {
             self.show_central_content(ui);
-
-            // ui.add_space(5.0);
-
-            // ui.horizontal(|ui| {
-            //     ui.heading(RichText::new("[PFS]").strong());
-            //     ui.heading("|");
-            //     ui.heading("Precision Fit Studio");
-            // });
-
-            // // Maybe the material feature button shouldn't be part of the enum and instead should be a toggle?
-            // // This would mean that it could keep displaying the info
-            // // Orrr maybe just all the information gets spat out at the end in a spreadsheet style thing
-
-            // ui.add_space(10.0);
-
-            // if self.state.advanced {
-            //     ui.horizontal(|ui| {
-            //         self.hub.show(ui, &mut self.state, &mut self.materials);
-
-            //         ui.add_space(10.0);
-
-            //         self.shaft.show(ui, &mut self.state, &mut self.materials);
-            //     });
-
-            //     ui.add_space(10.0);
-
-            //     plot::side_by_side(ui, &self.state, &self.hub, &self.shaft);
-
-            //     ui.add_space(10.0);
-
-            //     material::temperature_input(ui, &mut self.state, &mut self.hub, &mut self.shaft);
-
-            //     ui.add_space(10.0);
-
-            //     material::temperature_output(ui, &mut self.state, &self.hub, &self.shaft);
-            // } else {
-            //     // Simple mode
-            //     self.hub.show(ui, &mut self.state, &mut self.materials);
-
-            //     ui.add_space(10.0);
-
-            //     self.shaft.show(ui, &mut self.state, &mut self.materials);
-
-            //     ui.add_space(10.0);
-
-            //     let fit = Fit::new(&self.hub, &self.shaft);
-            //     fit.show(ui, &self.state);
 
             ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
                 egui::warn_if_debug_build(ui);

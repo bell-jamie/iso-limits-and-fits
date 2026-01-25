@@ -11,7 +11,7 @@ use super::{
     feature::Feature,
     state::State,
     theme::FitZoneColors,
-    utils::{dynamic_precision, text_width, truncate},
+    utils::{decimals_for_sig_figs, text_width, truncate_string},
 };
 
 use redprint::core::transform::Transform;
@@ -974,7 +974,7 @@ pub fn fit_display(app: &mut Studio, ui: &mut Ui) {
         let y_range = y_max - y_min;
 
         // Define widths as ratios
-        let text_margin_ratio = 15.0;
+        let text_margin_ratio = 20.0;
         let pad_width_ratio = 1.0;
         let comp_width_ratio = 20.0;
         let zone_width_ratio = 7.0;
@@ -1132,7 +1132,7 @@ pub fn fit_display(app: &mut Studio, ui: &mut Ui) {
             .include_x(0.0)
             .include_x(width_total)
             .label_formatter(|_name, point| {
-                let size_dp = dynamic_precision(point.y, 4);
+                let size_dp = decimals_for_sig_figs(point.y, 4);
                 format!("{:.size_dp$} mm", point.y)
             })
             .show(ui, |plot_ui| {
@@ -1156,11 +1156,15 @@ pub fn fit_display(app: &mut Studio, ui: &mut Ui) {
                 let plot_rect = plot_ui.transform().frame();
                 let ctx = plot_ui.ctx().clone();
                 let text_color = ctx.style().visuals.text_color();
-                let font_id = egui::FontId::new(13.0, egui::FontFamily::Proportional);
+                let font_id = egui::TextStyle::Body.resolve(&ctx.style());
 
                 // Shaft label: left side of plot, bottom, rotated -90 degrees
                 let shaft_galley = ctx.fonts_mut(|f| {
-                    f.layout_no_wrap(truncate(&shaft.name, 20), font_id.clone(), text_color)
+                    f.layout_no_wrap(
+                        truncate_string(&shaft.name, 20),
+                        font_id.clone(),
+                        text_color,
+                    )
                 });
                 let shaft_pos = egui::pos2(plot_rect.left() + 2.0, plot_rect.bottom() - 2.0);
                 let shaft_text_shape = egui::epaint::TextShape {
@@ -1180,7 +1184,7 @@ pub fn fit_display(app: &mut Studio, ui: &mut Ui) {
 
                 // Hub label: right side of plot, top, rotated -90 degrees
                 let hub_galley = ctx.fonts_mut(|f| {
-                    f.layout_no_wrap(truncate(&hub.name, 20), font_id.clone(), text_color)
+                    f.layout_no_wrap(truncate_string(&hub.name, 20), font_id.clone(), text_color)
                 });
                 let hub_text_width = hub_galley.size().x;
                 let hub_text_height = hub_galley.size().y;

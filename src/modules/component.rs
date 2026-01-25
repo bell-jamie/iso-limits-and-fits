@@ -5,7 +5,6 @@ use egui::Ui;
 pub enum Focus {
     Inner,
     Outer,
-    Material,
 }
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]

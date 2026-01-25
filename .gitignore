@@ -14,3 +14,9 @@ archived_code
 
 # https://github.com/lycheeverse/lychee
 .lycheecache
+
+# Claude
+.claude/
+
+# Notes
+architecture.md

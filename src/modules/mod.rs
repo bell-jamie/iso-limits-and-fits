@@ -8,6 +8,7 @@ pub mod mat_data;
 pub mod material;
 pub mod modal;
 pub mod plot;
+pub mod settings;
 pub mod shortcuts;
 pub mod state;
 pub mod theme;

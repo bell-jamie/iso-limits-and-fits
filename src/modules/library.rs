@@ -1,10 +1,10 @@
-use crate::Studio;
 use crate::modules::{
     cards::{ComponentDrag, MaterialDrag},
     component::Component,
     mat_data::material_list,
     material::Material,
-    utils::{self, truncate_to_width},
+    state::State,
+    utils::{self, truncate_string_to_width},
 };
 use egui::{Button, RichText, Ui};
 
@@ -78,10 +78,10 @@ impl Library {
         self.materials.get_mut(id)
     }
 
-    pub fn render(&mut self, ui: &mut Ui) {
+    pub fn render(&mut self, state: &mut State, ui: &mut Ui) {
         self.components(ui);
         ui.separator();
-        self.materials(ui);
+        self.materials(state, ui);
     }
 
     fn components(&mut self, ui: &mut Ui) {
@@ -111,7 +111,7 @@ impl Library {
                     // Drag source for the component
                     let drag_id = egui::Id::new(("component_drag", i));
                     ui.dnd_drag_source(drag_id, ComponentDrag(i), |ui| {
-                        ui.label(truncate_to_width(&ctx, &component.name, name_width));
+                        ui.label(truncate_string_to_width(&ctx, &component.name, name_width));
                     });
 
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -120,21 +120,24 @@ impl Library {
                             let delete_btn = Button::new(RichText::new("🗑")).frame(false);
                             if ui.add(delete_btn).on_hover_text("Delete").clicked() {
                                 ui.ctx().data_mut(|d| {
-                                    d.insert_temp(egui::Id::new("pending_delete"), i);
+                                    d.insert_temp(egui::Id::new("pending_delete_component"), i);
                                 });
                             }
+                            ui.add_space(-3.0);
                         }
 
                         // Shaft selection button
                         let shaft_btn =
-                            Button::new(RichText::new("S").color(shaft_button_colour)).frame(false);
+                            Button::new(RichText::new("🇸").color(shaft_button_colour)).frame(false);
                         if ui.add(shaft_btn).on_hover_text("Set as Shaft").clicked() {
                             new_shaft_id = i;
                         }
 
+                        ui.add_space(-5.0);
+
                         // Hub selection button
                         let hub_btn =
-                            Button::new(RichText::new("H").color(hub_button_colour)).frame(false);
+                            Button::new(RichText::new("🇭").color(hub_button_colour)).frame(false);
                         if ui.add(hub_btn).on_hover_text("Set as Hub").clicked() {
                             new_hub_id = i;
                         }
@@ -154,13 +157,17 @@ impl Library {
         });
     }
 
-    fn materials(&mut self, ui: &mut Ui) {
+    fn materials(&mut self, state: &mut State, ui: &mut Ui) {
+        // Track which material to edit (if any clicked this frame)
+        let mut edit_material_id: Option<usize> = None;
+
         utils::accordion(ui, "materials_accordion", "Materials", false, |ui| {
             let mut new_hub_mat_id = self.get_hub().map(|hub| hub.material_id);
             let mut new_shaft_mat_id = self.get_shaft().map(|shaft| shaft.material_id);
 
             // Calculate available width for name (panel width minus buttons and spacing)
-            let buttons_width = if self.materials.len() > 2 { 50.0 } else { 30.0 };
+            // Buttons: H, S, edit, delete (if >2) ~ 70px, plus spacing ~20px
+            let buttons_width = if self.materials.len() > 2 { 70.0 } else { 50.0 };
             let name_width = (ui.available_width() - buttons_width).max(40.0);
             let ctx = ui.ctx().clone();
 
@@ -184,32 +191,43 @@ impl Library {
                     // Drag source for the material
                     let drag_id = egui::Id::new(("material_drag", i));
                     ui.dnd_drag_source(drag_id, MaterialDrag(i), |ui| {
-                        ui.label(truncate_to_width(&ctx, &material.name, name_width));
+                        ui.label(truncate_string_to_width(&ctx, &material.name, name_width));
                     });
 
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        // Delete button (only if more than 2 components)
+                        // Delete button (only if more than 2 materials)
                         if self.materials.len() > 2 {
                             let delete_btn = Button::new(RichText::new("🗑")).frame(false);
                             if ui.add(delete_btn).on_hover_text("Delete").clicked() {
                                 ui.ctx().data_mut(|d| {
-                                    d.insert_temp(egui::Id::new("pending_delete"), i);
+                                    d.insert_temp(egui::Id::new("pending_delete_material"), i);
                                 });
                             }
+                            ui.add_space(-3.0);
                         }
 
                         // Shaft selection button
                         let shaft_btn =
-                            Button::new(RichText::new("S").color(shaft_button_colour)).frame(false);
+                            Button::new(RichText::new("🇸").color(shaft_button_colour)).frame(false);
                         if ui.add(shaft_btn).on_hover_text("Shaft Material").clicked() {
                             new_shaft_mat_id = Some(i);
                         }
 
+                        ui.add_space(-5.0);
+
                         // Hub selection button
                         let hub_btn =
-                            Button::new(RichText::new("H").color(hub_button_colour)).frame(false);
+                            Button::new(RichText::new("🇭").color(hub_button_colour)).frame(false);
                         if ui.add(hub_btn).on_hover_text("Hub Material").clicked() {
                             new_hub_mat_id = Some(i);
+                        }
+
+                        ui.add_space(-2.0);
+
+                        // Edit button
+                        let edit_btn = Button::new(RichText::new("⛶")).frame(false);
+                        if ui.add(edit_btn).on_hover_text("Edit").clicked() {
+                            edit_material_id = Some(i);
                         }
                     });
                 });
@@ -229,5 +247,11 @@ impl Library {
                 self.materials.push(Material::default());
             }
         });
+
+        // Open material editor if edit was clicked
+        if let Some(id) = edit_material_id {
+            state.editing_material_id = Some(id);
+            state.show_material_editor = true;
+        }
     }
 }

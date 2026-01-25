@@ -1,39 +1,122 @@
 use egui::{Context, RichText, Ui, Vec2};
 
-/// Rounds `num` to the specified number of decimal places.
-/// If `decimals` is negative, a default precision of 4 decimal places is used.
-pub fn decimals(num: f64, decimals: i32) -> f64 {
-    let power = if decimals >= 0 { decimals } else { 4 };
-    let factor = 10f64.powi(power);
-    (num * factor).round() / factor
+/// Trait to extend floats with a `sanitise` method
+pub trait SanitiseFloat: Sized {
+    /// Rounds the number to the specified number of decimal places.
+    fn sanitise(self, decimals: usize) -> Self;
 }
 
-/// Computes dynamic level of precision based on value magnitude
-/// Used to keep a constant number of figures
-pub fn dynamic_precision(value: f64, max_decimals: isize) -> usize {
-    if value.is_nan() || value.is_infinite() {
-        return 0; //
+impl SanitiseFloat for f64 {
+    fn sanitise(self, decimals: usize) -> Self {
+        let factor = 10f64.powi(decimals as i32);
+        (self * factor).round() / factor
+    }
+}
+
+impl SanitiseFloat for f32 {
+    fn sanitise(self, decimals: usize) -> Self {
+        let factor = 10f32.powi(decimals as i32);
+        (self * factor).round() / factor
+    }
+}
+
+/// Formats a floating-point value to the specified number of significant figures.
+///
+/// - Rounds to nearest (IEEE-754 `round` semantics)
+/// - Preserves sign
+/// - Returns `"0"` for zero
+/// - Returns `"NaN"` / `"inf"` / `"-inf"` unchanged
+pub fn fix_sf<T: Into<f64>>(value: T, sig_figs: isize) -> String {
+    let value = value.into();
+
+    if !value.is_finite() {
+        return value.to_string();
     }
 
-    let magnitude = if value <= 1.0 && value >= -1.0 {
-        0 // Default magnitude for zero
+    if value == 0.0 {
+        return "0".to_string();
+    }
+
+    let sig_figs = sig_figs.max(1);
+    let magnitude = value.abs().log10().floor() as isize;
+    let decimals = sig_figs - 1 - magnitude;
+
+    let factor = 10f64.powi(decimals as i32);
+    let rounded = (value * factor).round() / factor;
+
+    if decimals > 0 {
+        format!("{:.*}", decimals as usize, rounded)
+    } else {
+        rounded.trunc().to_string()
+    }
+}
+
+/// Rounds `num` to the specified number of decimal places and returns it as a string.
+pub fn fix_dp<T: Into<f64>>(num: T, dp: usize) -> String {
+    format!("{:.*}", dp, num.into())
+}
+
+/// Rounds `num` to the specified number of decimal places and returns a string.
+/// Trailing zeros are trimmed, but at least one decimal place is preserved.
+pub fn lim_dp<T: Into<f64>>(num: T, dp: usize) -> String {
+    let num = num.into();
+    let mut s = format!("{:.*}", dp, num);
+
+    if s.contains('.') {
+        // Remove trailing zeros
+        while s.ends_with('0') {
+            s.pop();
+        }
+        // Ensure at least one decimal place remains
+        if s.ends_with('.') {
+            s.push('0');
+        }
+    }
+
+    s
+}
+
+/// Returns the number of decimal places needed to truncate a value
+/// to a roughly constant number of significant figures.
+///
+/// Precision decreases as the value’s order of magnitude increases.
+/// Returns `0` for NaN or infinite values.
+pub fn decimals_for_sig_figs(value: f64, max_sig_figs: isize) -> usize {
+    if value.is_nan() || value.is_infinite() {
+        return 0;
+    }
+
+    let magnitude = if value >= -1.0 && value <= 1.0 {
+        0
     } else {
         value.abs().log10().floor() as isize
     };
 
-    (max_decimals - magnitude).max(0) as usize
+    (max_sig_figs - magnitude).max(0) as usize
+}
+
+/// Truncates `value` to the specified number of significant figures.
+///
+/// Uses `decimals_for_sig_figs` to determine the required decimal places.
+/// NaN and infinite values are returned unchanged.
+pub fn truncate_to_sig_figs(value: f64, max_sig_figs: isize) -> f64 {
+    if value.is_nan() || value.is_infinite() {
+        return value;
+    }
+
+    let decimals = decimals_for_sig_figs(value, max_sig_figs);
+    let factor = 10f64.powi(decimals as i32);
+
+    (value * factor).trunc() / factor
 }
 
 /// Returns the number of decimal places required to fully display `value` precisely.
-/// Takes 'decimals' argument to limit required precision
-pub fn req_precision(value: f64, decimals: isize) -> usize {
+pub fn display_dp(value: f64) -> usize {
     if value == 0.0 || value.is_nan() || value.is_infinite() {
         return 0;
     }
 
-    // Format with limited precision
-    let limit = if decimals >= 0 { decimals as usize } else { 4 };
-    let s = format!("{:.limit$}", value.abs());
+    let s = format!("{}", value.abs());
 
     // Find decimal point
     if let Some(pos) = s.find('.') {
@@ -105,6 +188,7 @@ pub fn accordion<R>(
         },
     );
 
+    ui.add_space(ui.style().spacing.item_spacing.y);
     if open { Some(add_contents(ui)) } else { None }
 }
 
@@ -119,7 +203,7 @@ pub fn at_temp(size: f64, temp: f64, cte: f64) -> f64 {
 }
 
 /// Truncates a string to a maximum length, adding an ellipsis if truncated.
-pub fn truncate(s: &str, max_len: usize) -> String {
+pub fn truncate_string(s: &str, max_len: usize) -> String {
     if s.len() > max_len {
         format!("{}…", &s[..max_len.saturating_sub(1)])
     } else {
@@ -128,8 +212,8 @@ pub fn truncate(s: &str, max_len: usize) -> String {
 }
 
 /// Truncates a string to fit within a given pixel width, adding an ellipsis if truncated.
-pub fn truncate_to_width(ctx: &Context, s: &str, max_width: f32) -> String {
-    let font_id = egui::FontId::default();
+pub fn truncate_string_to_width(ctx: &Context, s: &str, max_width: f32) -> String {
+    let font_id = egui::TextStyle::Body.resolve(&ctx.style());
     let full_width = ctx
         .fonts_mut(|f| f.layout_no_wrap(s.to_string(), font_id.clone(), egui::Color32::WHITE))
         .size()
@@ -148,7 +232,7 @@ pub fn truncate_to_width(ctx: &Context, s: &str, max_width: f32) -> String {
         .size()
         .x;
 
-    let target_width = max_width - ellipsis_width;
+    let target_width = max_width - ellipsis_width - ctx.style().spacing.item_spacing.x;
     if target_width <= 0.0 {
         return ellipsis.to_string();
     }
@@ -183,7 +267,7 @@ pub fn truncate_to_width(ctx: &Context, s: &str, max_width: f32) -> String {
 
 /// Format a floating-point temperature as "{value} ºC"
 pub fn format_temp(t: f64) -> String {
-    format!("{t} ºC")
+    format!("{} ºC", truncate_to_sig_figs(t, 3))
 }
 
 /// Parse a temperature string like "-12.3 ºC" into an f64

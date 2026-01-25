@@ -37,6 +37,9 @@ pub fn install(ctx: &egui::Context) {
     // Fonts
     // ctx.set_fonts(fonts());
 
+    // Font styling
+    apply_font_styling(ctx);
+
     // Apply shared styling to both themes
     ctx.style_mut_of(egui::Theme::Light, apply_shared_styling);
     ctx.style_mut_of(egui::Theme::Dark, apply_shared_styling);
@@ -75,6 +78,14 @@ fn apply_shared_styling(style: &mut Style) {
     style.visuals.widgets.hovered.expansion = 1.0;
     style.visuals.widgets.active.expansion = 1.0;
     style.visuals.widgets.open.expansion = 0.0;
+
+    // Window top bar highlighting
+    style.visuals.window_highlight_topmost = false;
+
+    // Trailing colour on sliders
+    style.visuals.slider_trailing_fill = true;
+
+    // style.visuals.text_edit_bg_color = Some(Color32::from_rgb(0x3a, 0x3a, 0x3a));
 }
 
 fn apply_light_colors(style: &mut Style) {
@@ -127,7 +138,8 @@ fn apply_colors(
 ) {
     // Sets the general background colour and ensure that textboxes are seamless
     style.visuals.panel_fill = background_colour;
-    style.visuals.extreme_bg_color = background_colour;
+    // style.visuals.extreme_bg_color = background_colour; // don't want to affect scrollbars as well
+    style.visuals.text_edit_bg_color = Some(background_colour); // this way we only affect textedit
     style.visuals.window_fill = background_colour;
     // style.visuals.widgets.noninteractive.bg_fill = Color32::from_rgb(0x3a, 0x3a, 0x3a);
 
@@ -149,4 +161,64 @@ fn apply_colors(
 
     style.visuals.selection.bg_fill = accent_colour;
     style.visuals.selection.stroke.color = Color32::WHITE;
+}
+
+pub fn _fonts() -> egui::FontDefinitions {
+    let mut fonts = egui::FontDefinitions::default();
+
+    // Register custom font
+    // fonts.font_data.insert(
+    //     "MyFont".to_owned(),
+    //     egui::FontData::from_static(include_bytes!("fonts/my_font.ttf")),
+    // );
+
+    // Make it the first choice for proportional text
+    // fonts
+    //     .families
+    //     .entry(egui::FontFamily::Proportional)
+    //     .or_default()
+    //     .insert(0, "MyFont".to_owned());
+
+    // Optional: use it for monospace as well
+    // fonts
+    //     .families
+    //     .entry(egui::FontFamily::Monospace)
+    //     .or_default()
+    //     .insert(0, "MyFont".to_owned());
+
+    fonts
+}
+
+pub fn apply_font_styling(ctx: &egui::Context) {
+    let mut style = (*ctx.style()).clone();
+
+    style.text_styles = [
+        (
+            egui::TextStyle::Heading,
+            egui::FontId::new(20.0, egui::FontFamily::Proportional), // 18.0
+        ),
+        (
+            egui::TextStyle::Name("SubHeading".into()),
+            egui::FontId::new(18.0, egui::FontFamily::Proportional), // don't know how this works
+        ),
+        (
+            egui::TextStyle::Body,
+            egui::FontId::new(15.0, egui::FontFamily::Proportional), // 13.0
+        ),
+        (
+            egui::TextStyle::Button,
+            egui::FontId::new(15.0, egui::FontFamily::Proportional), // 13.0
+        ),
+        (
+            egui::TextStyle::Small,
+            egui::FontId::new(12.0, egui::FontFamily::Proportional), // 9.0
+        ),
+        (
+            egui::TextStyle::Monospace,
+            egui::FontId::new(15.0, egui::FontFamily::Monospace), // 13.0
+        ),
+    ]
+    .into();
+
+    ctx.set_style(style);
 }

@@ -12,6 +12,8 @@ pub struct State {
     pub scale: Scale,
     pub show_library_panel: bool,
     pub show_egui_settings: bool,
+    pub show_material_editor: bool,
+    pub editing_material_id: Option<usize>,
 }
 
 impl State {
@@ -26,6 +28,8 @@ impl State {
             scale: Scale::default(),
             show_library_panel: false,
             show_egui_settings: false,
+            show_material_editor: false,
+            editing_material_id: None,
         }
     }
 }
@@ -40,7 +44,7 @@ impl Scale {
     pub fn default() -> Self {
         Scale {
             expand: false,
-            value: 1.5,
+            value: 1.0,
         }
     }
 
@@ -57,7 +61,22 @@ impl Scale {
                     if !slider.is_pointer_button_down_on() {
                         ui.ctx().set_zoom_factor(self.value);
                     }
-                    ui.label(format!("{:.1}x", self.value));
+                    ui.add(
+                        egui::DragValue::new(&mut self.value)
+                            .custom_formatter(|n, _| format!("{n:.1}x"))
+                            .custom_parser(|s| {
+                                s.chars()
+                                    .filter(|c| c.is_ascii_digit() || c == &'.')
+                                    .collect::<String>()
+                                    .parse()
+                                    .ok()
+                            })
+                            .update_while_editing(false)
+                            .range(min..=max)
+                            .max_decimals(1)
+                            .speed(0.0),
+                    )
+                    .on_hover_cursor(egui::CursorIcon::Default);
                 }
             })
             .response
