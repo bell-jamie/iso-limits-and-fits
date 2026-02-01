@@ -4,7 +4,7 @@ version = "0.8.0"
 authors = ["James Bell <jmhbell@icloud.com>"]
 edition = "2024"
 include = ["LICENSE-APACHE", "LICENSE-MIT", "**/*.rs", "Cargo.toml"]
-rust-version = "1.85"
+rust-version = "1.89"
 
 [package.metadata.docs.rs]
 all-features = true
