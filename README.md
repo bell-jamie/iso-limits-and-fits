@@ -2,4 +2,5 @@
 
 This calculator is currently WIP and should be used with caution. Check your work.
 
-[Calculator](https://bell-jamie.github.io/iso-limits-and-fits/)
+[Stable](https://bell-jamie.github.io/iso-limits-and-fits/)
+[Latest](https://bell-jamie.github.io/iso-limits-and-fits/development)
