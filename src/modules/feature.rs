@@ -253,10 +253,16 @@ fn feature_output_ui(feature: &mut Feature, ui: &mut Ui, id: &str) {
 
     ui.add_space(5.0);
 
-    let (upper, middle, lower) = (
+    let (upper_limit, middle_limit, lower_limit) = (
         feature.upper_limit().sanitise(6),
         feature.middle_limit().sanitise(6),
         feature.lower_limit().sanitise(6),
+    );
+
+    let (upper_tol, middle_tol, lower_tol) = (
+        feature.tolerance.upper.abs().sanitise(6),
+        feature.tolerance.mid().sanitise(6),
+        feature.tolerance.lower.abs().sanitise(6),
     );
 
     Grid::new(id)
@@ -269,7 +275,7 @@ fn feature_output_ui(feature: &mut Feature, ui: &mut Ui, id: &str) {
                 .on_hover_text("Upper limit");
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.label("mm");
-                ui.label(format!("{}", upper));
+                ui.label(format!("{}", upper_limit));
             });
             ui.label(if feature.tolerance.upper.is_sign_positive() {
                 "+"
@@ -278,21 +284,21 @@ fn feature_output_ui(feature: &mut Feature, ui: &mut Ui, id: &str) {
             });
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.label(units);
-                ui.label(format!("{}", scale * feature.tolerance.upper.abs()));
+                ui.label(format!("{}", scale * upper_tol));
             });
             ui.end_row();
 
             ui.label("⬍")
                 .on_hover_cursor(egui::CursorIcon::Default)
-                .on_hover_text("Mid-limits");
+                .on_hover_text("Middle limit");
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.label("mm");
-                ui.label(format!("{}", middle));
+                ui.label(format!("{}", middle_limit));
             });
             ui.label("±");
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.label(units);
-                ui.label(format!("{}", scale * feature.tolerance.mid()));
+                ui.label(format!("{}", scale * middle_tol));
             });
             ui.end_row();
 
@@ -301,7 +307,7 @@ fn feature_output_ui(feature: &mut Feature, ui: &mut Ui, id: &str) {
                 .on_hover_text("Lower limit");
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.label("mm");
-                ui.label(format!("{}", lower));
+                ui.label(format!("{}", lower_limit));
             });
             ui.label(if feature.tolerance.lower.is_sign_positive() {
                 "+"
@@ -310,7 +316,7 @@ fn feature_output_ui(feature: &mut Feature, ui: &mut Ui, id: &str) {
             });
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.label(units);
-                ui.label(format!("{}", scale * feature.tolerance.lower.abs()));
+                ui.label(format!("{}", scale * lower_tol));
             });
             ui.end_row();
         });

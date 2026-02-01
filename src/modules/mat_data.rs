@@ -5,7 +5,7 @@ pub fn material_list() -> BTreeSet<Material> {
     vec![
         // https://www.londonbronze.co.uk/Docs/Phosphor%20Bronze%20PB104.pdf
         Material {
-            name: "Phosphor Bronze — PB104".to_owned(),
+            name: "PB104".to_owned(),
             cte: 17.0,
             poissons: 0.34,
             youngs: 105.0,

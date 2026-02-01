@@ -53,7 +53,7 @@ impl Scale {
         if ui
             .horizontal(|ui| {
                 ui.toggle_value(&mut self.expand, "🔍")
-                    .on_hover_text("Ui scale");
+                    .on_hover_text("UI scale");
 
                 if self.expand {
                     let slider =

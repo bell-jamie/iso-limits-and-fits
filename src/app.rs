@@ -73,9 +73,8 @@ impl Studio {
                 .add(Button::new("Reset").frame_when_inactive(true))
                 .clicked()
             {
-                self.state = State::default();
-                self.thermal = Thermal::default();
-                self.library = Library::default();
+                ui.ctx()
+                    .data_mut(|d| d.insert_temp(egui::Id::new("pending_reset"), true));
             }
 
             if self.state.debug {
@@ -160,7 +159,19 @@ impl Studio {
 
     fn show_library_panel(&mut self, ui: &mut egui::Ui) {
         ui.add_space(5.0);
-        ui.heading(RichText::new("Library").strong());
+        ui.horizontal(|ui| {
+            ui.heading(RichText::new("Library").strong());
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui
+                    .add(Button::new("↺").frame(false).small())
+                    .on_hover_text("Reset library")
+                    .clicked()
+                {
+                    ui.ctx()
+                        .data_mut(|d| d.insert_temp(egui::Id::new("pending_library_reset"), true));
+                }
+            });
+        });
         ui.separator();
 
         let Self { state, library, .. } = self;
@@ -205,6 +216,9 @@ impl eframe::App for Studio {
 
         crate::modules::modal::delete_component(ctx, self);
         crate::modules::modal::delete_material(ctx, self);
+        crate::modules::modal::reset_confirm(ctx, self);
+        crate::modules::modal::library_reset_confirm(ctx, self);
+        crate::modules::modal::thermal_colours(ctx, self);
 
         // Material editor window
         if self.state.show_material_editor {

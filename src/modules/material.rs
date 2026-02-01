@@ -53,7 +53,7 @@ pub fn show_material_editor(app: &mut Studio, ctx: &egui::Context) {
                                 ui.add(
                                     DragValue::new(&mut material.youngs)
                                         .range(0.0..=10_000.0)
-                                        .speed(100.0)
+                                        .speed(1.0)
                                         .max_decimals(0),
                                 );
                                 ui.label("GPa");

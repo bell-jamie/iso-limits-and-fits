@@ -78,6 +78,18 @@ impl Library {
         self.materials.get_mut(id)
     }
 
+    pub fn get_hub_material_name(&self) -> Option<&str> {
+        self.get_hub()
+            .and_then(|hub| self.get_material(hub.material_id))
+            .map(|mat| mat.name.as_str())
+    }
+
+    pub fn get_shaft_material_name(&self) -> Option<&str> {
+        self.get_shaft()
+            .and_then(|shaft| self.get_material(shaft.material_id))
+            .map(|mat| mat.name.as_str())
+    }
+
     pub fn render(&mut self, state: &mut State, ui: &mut Ui) {
         self.components(ui);
         ui.separator();
@@ -92,9 +104,9 @@ impl Library {
             // Calculate available width for name (panel width minus buttons and spacing)
             // Buttons: H, S, delete (if >2) ~ 60px, plus spacing ~20px
             let buttons_width = if self.components.len() > 2 {
-                50.0
+                60.0
             } else {
-                30.0
+                40.0
             };
             let name_width = (ui.available_width() - buttons_width).max(40.0);
             let ctx = ui.ctx().clone();
@@ -167,7 +179,7 @@ impl Library {
 
             // Calculate available width for name (panel width minus buttons and spacing)
             // Buttons: H, S, edit, delete (if >2) ~ 70px, plus spacing ~20px
-            let buttons_width = if self.materials.len() > 2 { 70.0 } else { 50.0 };
+            let buttons_width = if self.materials.len() > 2 { 80.0 } else { 60.0 };
             let name_width = (ui.available_width() - buttons_width).max(40.0);
             let ctx = ui.ctx().clone();
 
@@ -225,7 +237,7 @@ impl Library {
                         ui.add_space(-2.0);
 
                         // Edit button
-                        let edit_btn = Button::new(RichText::new("⛶")).frame(false);
+                        let edit_btn = Button::new(RichText::new("🗖")).frame(false);
                         if ui.add(edit_btn).on_hover_text("Edit").clicked() {
                             edit_material_id = Some(i);
                         }
@@ -245,6 +257,7 @@ impl Library {
                 .clicked()
             {
                 self.materials.push(Material::default());
+                edit_material_id = Some(self.materials.len() - 1); // immediately edit last material
             }
         });
 

@@ -37,8 +37,9 @@ pub fn install(ctx: &egui::Context) {
     // Fonts
     // ctx.set_fonts(fonts());
 
-    // Font styling
-    apply_font_styling(ctx);
+    // Apply font styling to both themes
+    ctx.style_mut_of(egui::Theme::Light, apply_font_styling);
+    ctx.style_mut_of(egui::Theme::Dark, apply_font_styling);
 
     // Apply shared styling to both themes
     ctx.style_mut_of(egui::Theme::Light, apply_shared_styling);
@@ -164,7 +165,7 @@ fn apply_colors(
 }
 
 pub fn _fonts() -> egui::FontDefinitions {
-    let mut fonts = egui::FontDefinitions::default();
+    let fonts = egui::FontDefinitions::default();
 
     // Register custom font
     // fonts.font_data.insert(
@@ -189,9 +190,7 @@ pub fn _fonts() -> egui::FontDefinitions {
     fonts
 }
 
-pub fn apply_font_styling(ctx: &egui::Context) {
-    let mut style = (*ctx.style()).clone();
-
+fn apply_font_styling(style: &mut Style) {
     style.text_styles = [
         (
             egui::TextStyle::Heading,
@@ -219,6 +218,4 @@ pub fn apply_font_styling(ctx: &egui::Context) {
         ),
     ]
     .into();
-
-    ctx.set_style(style);
 }

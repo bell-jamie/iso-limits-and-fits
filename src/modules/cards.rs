@@ -3,8 +3,7 @@ use crate::modules::component::Focus;
 use crate::modules::feature::show_feature;
 use crate::modules::material::Material;
 use crate::modules::utils::{at_temp, fix_dp, format_temp, parse_temp, truncate_string};
-use egui::{Align, Frame, Grid, Layout, Ui};
-use egui::{DragValue, RichText};
+use egui::{Align, Button, DragValue, Frame, Grid, Layout, RichText, Ui};
 
 /// Wrapper type for component drag payload
 #[derive(Clone, Copy)]
@@ -369,7 +368,7 @@ impl CardGrid {
 
                     ui.label("🌓")
                         .on_hover_cursor(egui::CursorIcon::Default)
-                        .on_hover_text("Mid limits");
+                        .on_hover_text("Nominal condition");
                     ui.label(format!("{:.} {units}", fix_dp(scale * mid.abs(), 1)));
                     ui.label(mid_type);
                     ui.end_row();
@@ -393,195 +392,163 @@ impl CardGrid {
     }
 
     fn temp_display(&self, app: &mut Studio, ui: &mut Ui) {
-        // Get component names for colour pickers (truncated to 12 chars)
+        // Get component names for colour pickers (truncated to 20 chars)
         let hub_name = app
             .library
             .get_hub()
-            .map(|h| truncate_string(&h.name, 12))
+            .map(|h| truncate_string(&h.name, 20))
             .unwrap_or_else(|| "Hub".to_string());
         let shaft_name = app
             .library
             .get_shaft()
-            .map(|s| truncate_string(&s.name, 12))
+            .map(|s| truncate_string(&s.name, 20))
             .unwrap_or_else(|| "Shaft".to_string());
 
         Frame::group(ui.style()).show(ui, |ui| {
             ui.horizontal(|ui| {
-                ui.label(RichText::new("Thermal"));
+                ui.label(RichText::new("Thermal Analysis"));
                 ui.with_layout(Layout::right_to_left(Align::Min), |ui| {
                     if ui.button("➖").clicked() {
                         app.thermal.enabled = false;
                     };
                 });
             });
+
             ui.separator();
 
-            // Top row: Settings in horizontal layout
             ui.horizontal(|ui| {
-                // Temperature inputs
-                ui.vertical(|ui| {
-                    ui.label(RichText::new("Temperature").strong());
-                    Grid::new("thermal_temps").num_columns(2).show(ui, |ui| {
-                        ui.label("Lower");
-                        ui.add(
-                            DragValue::new(&mut app.thermal.lower)
-                                .range(-273.15..=app.thermal.upper)
-                                .custom_formatter(|t, _| format_temp(t))
-                                .custom_parser(|s| parse_temp(s))
-                                .min_decimals(1)
-                                .speed(1),
-                        );
-                        ui.end_row();
+                if let (Some(hub), Some(shaft)) = (app.library.get_hub(), app.library.get_shaft()) {
+                    let hub_cte = app
+                        .library
+                        .get_material(hub.material_id)
+                        .unwrap_or(&Material::default())
+                        .cte;
+                    let shaft_cte = app
+                        .library
+                        .get_material(shaft.material_id)
+                        .unwrap_or(&Material::default())
+                        .cte;
 
-                        ui.label("Upper");
-                        ui.add(
-                            DragValue::new(&mut app.thermal.upper)
-                                .range(app.thermal.lower..=10_000.0)
-                                .custom_formatter(|t, _| format_temp(t))
-                                .custom_parser(|s| parse_temp(s))
-                                .min_decimals(1)
-                                .speed(1),
+                    ui.vertical(|ui| {
+                        // Calculate dimensions at temperature
+                        let hub_lower =
+                            at_temp(hub.inner_diameter.lower_limit(), app.thermal.temp, hub_cte);
+                        let hub_upper =
+                            at_temp(hub.inner_diameter.upper_limit(), app.thermal.temp, hub_cte);
+                        let shaft_lower = at_temp(
+                            shaft.outer_diameter.lower_limit(),
+                            app.thermal.temp,
+                            shaft_cte,
                         );
-                        ui.end_row();
+                        let shaft_upper = at_temp(
+                            shaft.outer_diameter.upper_limit(),
+                            app.thermal.temp,
+                            shaft_cte,
+                        );
+
+                        // Calculate fit values at temperature
+                        let mmc = hub_lower - shaft_upper;
+                        let lmc = hub_upper - shaft_lower;
+                        let mid = (mmc + lmc) / 2.0;
+
+                        // Determine units based on magnitude
+                        let (units, scale) = if mmc.abs() < 1.0 && lmc.abs() < 1.0 {
+                            ("µm", 1_000.0)
+                        } else {
+                            ("mm", 1.0)
+                        };
+
+                        let condition = |mc: f64| {
+                            if mc.is_sign_positive() {
+                                "clearance"
+                            } else {
+                                "interference"
+                            }
+                        };
+
+                        Grid::new(format!("thermal_fit_output"))
+                            .striped(false)
+                            .min_col_width(10.0)
+                            .spacing([15.0, 4.0])
+                            .show(ui, |ui| {
+                                ui.label("🌑")
+                                    .on_hover_cursor(egui::CursorIcon::Default)
+                                    .on_hover_text("Max material condition");
+                                ui.label(format!("{:.} {units}", fix_dp(scale * mmc.abs(), 1)));
+                                ui.label(condition(mmc));
+                                ui.end_row();
+
+                                ui.label("🌓")
+                                    .on_hover_cursor(egui::CursorIcon::Default)
+                                    .on_hover_text("Nominal condition");
+                                ui.label(format!("{:.} {units}", fix_dp(scale * mid.abs(), 1)));
+                                ui.label(condition(mid));
+                                ui.end_row();
+
+                                ui.label("🌕")
+                                    .on_hover_cursor(egui::CursorIcon::Default)
+                                    .on_hover_text("Least material condition");
+                                ui.label(format!("{:.} {units}", fix_dp(scale * lmc.abs(), 1)));
+                                ui.label(condition(lmc));
+                                ui.end_row();
+                            });
                     });
-                });
+                }
 
                 ui.separator();
 
-                // Component colour pickers
                 ui.vertical(|ui| {
-                    ui.label(RichText::new("Colours").strong());
                     ui.horizontal(|ui| {
-                        ui.color_edit_button_srgba(&mut app.thermal.hub_colour);
-                        ui.label(&hub_name);
-                        if ui
-                            .small_button("↺")
-                            .on_hover_text("Reset to default")
-                            .clicked()
-                        {
-                            app.thermal.hub_colour =
-                                egui::Color32::RED.gamma_multiply(app.thermal.colour_gamma);
+                        ui.label("Temp:");
+                        ui.add(
+                            DragValue::new(&mut app.thermal.temp)
+                                .range(-273.15..=10_000.0)
+                                .custom_formatter(|t, _| format_temp(t))
+                                .custom_parser(|s| parse_temp(s))
+                                .min_decimals(1)
+                                .speed(0.1),
+                        );
+                        ui.separator();
+                        ui.checkbox(&mut app.thermal.show_intersections, "Show intersections");
+                        ui.separator();
+                        if ui.button("Colours").clicked() {
+                            ui.ctx().data_mut(|d| {
+                                d.insert_temp(egui::Id::new("show_thermal_colours"), true)
+                            });
                         }
+                        ui.separator();
+                        ui.add(Button::new("⛶")).on_hover_text("Fit plot");
                     });
                     ui.horizontal(|ui| {
-                        ui.color_edit_button_srgba(&mut app.thermal.shaft_colour);
-                        ui.label(&shaft_name);
-                        if ui
-                            .small_button("↺")
-                            .on_hover_text("Reset to default")
-                            .clicked()
-                        {
-                            app.thermal.shaft_colour =
-                                egui::Color32::BLUE.gamma_multiply(app.thermal.colour_gamma);
-                        }
+                        let hub_colour = app.thermal.hub_colour;
+                        let (rect, _) =
+                            ui.allocate_exact_size(egui::vec2(12.0, 12.0), egui::Sense::hover());
+                        ui.painter().rect_filled(rect, 2.0, hub_colour);
+                        ui.label(format!("{}:", &hub_name));
+                        ui.label(
+                            RichText::new(truncate_string(
+                                app.library.get_hub_material_name().unwrap_or_default(),
+                                30,
+                            ))
+                            .italics(),
+                        );
                     });
-                });
-
-                ui.separator();
-
-                // Intersection toggles
-                ui.vertical(|ui| {
-                    ui.label(RichText::new("Component Intersections").strong());
-                    ui.checkbox(
-                        &mut app.thermal.show_component_limit_intersections,
-                        "Limits",
-                    );
-                    ui.checkbox(
-                        &mut app.thermal.show_component_mid_intersections,
-                        "Mid-limits",
-                    );
-                });
-                ui.vertical(|ui| {
-                    ui.label(RichText::new("Temperature Intersections").strong());
-                    ui.checkbox(&mut app.thermal.show_temp_limit_intersections, "Limits");
-                    ui.checkbox(&mut app.thermal.show_temp_mid_intersections, "Mid-limits");
+                    ui.horizontal(|ui| {
+                        let shaft_colour = app.thermal.shaft_colour;
+                        let (rect, _) =
+                            ui.allocate_exact_size(egui::vec2(12.0, 12.0), egui::Sense::hover());
+                        ui.painter().rect_filled(rect, 2.0, shaft_colour);
+                        ui.label(format!("{}:", &shaft_name));
+                        ui.label(
+                            RichText::new(truncate_string(
+                                app.library.get_shaft_material_name().unwrap_or_default(),
+                                30,
+                            ))
+                            .italics(),
+                        );
+                    });
                 });
             });
-
-            ui.separator();
-
-            // Thermal fit outputs side by side
-            if let (Some(hub), Some(shaft)) = (app.library.get_hub(), app.library.get_shaft()) {
-                let hub_cte = app
-                    .library
-                    .get_material(hub.material_id)
-                    .unwrap_or(&Material::default())
-                    .cte;
-                let shaft_cte = app
-                    .library
-                    .get_material(shaft.material_id)
-                    .unwrap_or(&Material::default())
-                    .cte;
-
-                ui.horizontal(|ui| {
-                    for (label, temp) in
-                        [("Lower", app.thermal.lower), ("Upper", app.thermal.upper)]
-                    {
-                        ui.vertical(|ui| {
-                            // Calculate dimensions at temperature
-                            let hub_lower =
-                                at_temp(hub.inner_diameter.lower_limit(), temp, hub_cte);
-                            let hub_upper =
-                                at_temp(hub.inner_diameter.upper_limit(), temp, hub_cte);
-                            let shaft_lower =
-                                at_temp(shaft.outer_diameter.lower_limit(), temp, shaft_cte);
-                            let shaft_upper =
-                                at_temp(shaft.outer_diameter.upper_limit(), temp, shaft_cte);
-
-                            // Calculate fit values at temperature
-                            let mmc = hub_lower - shaft_upper;
-                            let lmc = hub_upper - shaft_lower;
-                            let mid = (mmc + lmc) / 2.0;
-
-                            // Determine units based on magnitude
-                            let (units, scale) = if mmc.abs() < 1.0 && lmc.abs() < 1.0 {
-                                ("µm", 1_000.0)
-                            } else {
-                                ("mm", 1.0)
-                            };
-
-                            let condition = |mc: f64| {
-                                if mc.is_sign_positive() {
-                                    "clearance"
-                                } else {
-                                    "interference"
-                                }
-                            };
-
-                            ui.label(RichText::new(format!("{label} ({temp:.0}°C)")).strong());
-
-                            Grid::new(format!("thermal_fit_{label}"))
-                                .striped(false)
-                                .min_col_width(10.0)
-                                .spacing([15.0, 4.0])
-                                .show(ui, |ui| {
-                                    ui.label("🌑")
-                                        .on_hover_cursor(egui::CursorIcon::Default)
-                                        .on_hover_text("Max material condition");
-                                    ui.label(format!("{:.} {units}", fix_dp(scale * mmc.abs(), 1)));
-                                    ui.label(condition(mmc));
-                                    ui.end_row();
-
-                                    ui.label("🌓")
-                                        .on_hover_cursor(egui::CursorIcon::Default)
-                                        .on_hover_text("Mid limits");
-                                    ui.label(format!("{:.} {units}", fix_dp(scale * mid.abs(), 1)));
-                                    ui.label(condition(mid));
-                                    ui.end_row();
-
-                                    ui.label("🌕")
-                                        .on_hover_cursor(egui::CursorIcon::Default)
-                                        .on_hover_text("Least material condition");
-                                    ui.label(format!("{:.} {units}", fix_dp(scale * lmc.abs(), 1)));
-                                    ui.label(condition(lmc));
-                                    ui.end_row();
-                                });
-                        });
-
-                        ui.separator();
-                    }
-                });
-            }
 
             ui.separator();
             crate::modules::thermal::fit_temp_plot(app, ui);
@@ -619,7 +586,7 @@ impl CardGrid {
             });
             if app.thermal.enabled {
                 ui.vertical(|ui| {
-                    ui.set_width(self.card_width * 2.0);
+                    ui.set_width(self.card_width * 2.5);
                     self.temp_display(app, ui);
                 });
             }

@@ -1119,7 +1119,7 @@ pub fn fit_display(app: &mut Studio, ui: &mut Ui) {
             .chamfer_symmetric("para_0_d", comp_width / 3.0)
             .build();
 
-        Plot::new("fit_display")
+        let plot_response = Plot::new("fit_display")
             .allow_drag(false)
             .allow_scroll(false)
             .allow_zoom(false)
@@ -1150,62 +1150,53 @@ pub fn fit_display(app: &mut Studio, ui: &mut Ui) {
                 }
                 render_component(plot_ui, &shaft_rect, None, None);
                 render_component(plot_ui, &hub_rect, None, None);
-
-                // Rotated component name labels - positioned relative to plot frame (screen coords)
-                // This ensures labels stay fixed even when plot bounds change
-                let plot_rect = plot_ui.transform().frame();
-                let ctx = plot_ui.ctx().clone();
-                let text_color = ctx.style().visuals.text_color();
-                let font_id = egui::TextStyle::Body.resolve(&ctx.style());
-
-                // Shaft label: left side of plot, bottom, rotated -90 degrees
-                let shaft_galley = ctx.fonts_mut(|f| {
-                    f.layout_no_wrap(
-                        truncate_string(&shaft.name, 20),
-                        font_id.clone(),
-                        text_color,
-                    )
-                });
-                let shaft_pos = egui::pos2(plot_rect.left() + 2.0, plot_rect.bottom() - 2.0);
-                let shaft_text_shape = egui::epaint::TextShape {
-                    pos: shaft_pos,
-                    galley: shaft_galley,
-                    underline: egui::Stroke::NONE,
-                    fallback_color: text_color,
-                    override_text_color: None,
-                    opacity_factor: 1.0,
-                    angle: -std::f32::consts::FRAC_PI_2,
-                };
-                ctx.layer_painter(egui::LayerId::new(
-                    egui::Order::Background,
-                    egui::Id::new("shaft_label"),
-                ))
-                .add(egui::Shape::Text(shaft_text_shape));
-
-                // Hub label: right side of plot, top, rotated -90 degrees
-                let hub_galley = ctx.fonts_mut(|f| {
-                    f.layout_no_wrap(truncate_string(&hub.name, 20), font_id.clone(), text_color)
-                });
-                let hub_text_width = hub_galley.size().x;
-                let hub_text_height = hub_galley.size().y;
-                let hub_pos = egui::pos2(
-                    plot_rect.right() - hub_text_height - 2.0,
-                    plot_rect.top() + hub_text_width + 2.0,
-                );
-                let hub_text_shape = egui::epaint::TextShape {
-                    pos: hub_pos,
-                    galley: hub_galley,
-                    underline: egui::Stroke::NONE,
-                    fallback_color: text_color,
-                    override_text_color: None,
-                    opacity_factor: 1.0,
-                    angle: -std::f32::consts::FRAC_PI_2,
-                };
-                ctx.layer_painter(egui::LayerId::new(
-                    egui::Order::Background,
-                    egui::Id::new("hub_label"),
-                ))
-                .add(egui::Shape::Text(hub_text_shape));
             });
+
+        // Render text labels after the plot, directly in screen coordinates
+        // This avoids visual lag from plot coordinate conversion during scrolling
+        let plot_rect = plot_response.response.rect;
+        let text_color = ui.visuals().text_color();
+        let font_id = egui::TextStyle::Body.resolve(ui.style());
+
+        // Shaft label: left side of plot, bottom, rotated -90 degrees
+        let shaft_galley = ui.ctx().fonts_mut(|f| {
+            f.layout_no_wrap(
+                truncate_string(&shaft.name, 20),
+                font_id.clone(),
+                text_color,
+            )
+        });
+        let shaft_pos = egui::pos2(plot_rect.left() + 2.0, plot_rect.bottom() - 2.0);
+        let shaft_text_shape = egui::epaint::TextShape {
+            pos: shaft_pos,
+            galley: shaft_galley,
+            underline: egui::Stroke::NONE,
+            fallback_color: text_color,
+            override_text_color: None,
+            opacity_factor: 1.0,
+            angle: -std::f32::consts::FRAC_PI_2,
+        };
+        ui.painter().add(egui::Shape::Text(shaft_text_shape));
+
+        // Hub label: right side of plot, top, rotated -90 degrees
+        let hub_galley = ui.ctx().fonts_mut(|f| {
+            f.layout_no_wrap(truncate_string(&hub.name, 20), font_id.clone(), text_color)
+        });
+        let hub_text_width = hub_galley.size().x;
+        let hub_text_height = hub_galley.size().y;
+        let hub_pos = egui::pos2(
+            plot_rect.right() - hub_text_height - 2.0,
+            plot_rect.top() + hub_text_width + 2.0,
+        );
+        let hub_text_shape = egui::epaint::TextShape {
+            pos: hub_pos,
+            galley: hub_galley,
+            underline: egui::Stroke::NONE,
+            fallback_color: text_color,
+            override_text_color: None,
+            opacity_factor: 1.0,
+            angle: -std::f32::consts::FRAC_PI_2,
+        };
+        ui.painter().add(egui::Shape::Text(hub_text_shape));
     }
 }
