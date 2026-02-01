@@ -1,4 +1,5 @@
 pub mod cards;
+pub mod changelog;
 pub mod component;
 pub mod feature;
 // pub mod fit;

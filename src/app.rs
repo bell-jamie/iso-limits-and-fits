@@ -141,10 +141,12 @@ impl Studio {
 
                         ui.add_space(5.0);
 
-                        ui.label(env!("CARGO_PKG_VERSION"))
-                            .on_hover_cursor(egui::CursorIcon::Help)
-                            .on_hover_text(format_changelog(CHANGELOG_ENTRIES));
-                        ui.label(" v");
+                        if ui.add(Button::new(format!("v{}", env!("CARGO_PKG_VERSION"))).frame(false))
+                            .on_hover_text("View changelog")
+                            .clicked()
+                        {
+                            ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new("show_changelog"), true));
+                        }
 
                         if self.state.debug {
                             ui.add_space(5.0);
@@ -219,6 +221,7 @@ impl eframe::App for Studio {
         crate::modules::modal::reset_confirm(ctx, self);
         crate::modules::modal::library_reset_confirm(ctx, self);
         crate::modules::modal::thermal_colours(ctx, self);
+        crate::modules::modal::changelog(ctx);
 
         // Material editor window
         if self.state.show_material_editor {
@@ -251,83 +254,4 @@ impl eframe::App for Studio {
             });
         });
     }
-}
-
-struct ChangelogEntry {
-    version: &'static str,
-    notes: &'static [&'static str],
-}
-
-const CHANGELOG_ENTRIES: &[ChangelogEntry] = &[
-    ChangelogEntry {
-        version: "0.5.0",
-        notes: &[
-            "Full ISO limits and fits tables enabled.",
-            "Debug mode added — click alpha.",
-        ],
-    },
-    ChangelogEntry {
-        version: "0.5.1",
-        notes: &["Minor UI change for fits."],
-    },
-    ChangelogEntry {
-        version: "0.5.2",
-        notes: &[
-            "Fixed manual limits not working.",
-            "Tooltips added.",
-            "Header bar tweaked.",
-        ],
-    },
-    ChangelogEntry {
-        version: "0.6.0",
-        notes: &[
-            "Thermal fit analysis added.",
-            "General UI tweaks and new symbols.",
-        ],
-    },
-    ChangelogEntry {
-        version: "0.6.1",
-        notes: &["Added zoom feature."],
-    },
-    ChangelogEntry {
-        version: "0.6.2",
-        notes: &[
-            "Added temperature sync.",
-            "Added separate temperature output.",
-            "UI tweaks.",
-        ],
-    },
-    ChangelogEntry {
-        version: "0.6.3",
-        notes: &["Soroush quickfix to lookup table."],
-    },
-    ChangelogEntry {
-        version: "0.6.4",
-        notes: &["Corrected logic for P to ZC deviation deltas."],
-    },
-    ChangelogEntry {
-        version: "0.7.0",
-        notes: &[
-            "Simple mode and advanced mode.",
-            "Interference stresses",
-            "Zoom feature tweaked.",
-        ],
-    },
-];
-
-fn format_changelog(entries: &[ChangelogEntry]) -> String {
-    let mut changelog = String::from("Version Notes\n\n");
-
-    for entry in entries {
-        changelog.push_str(&format!("{}\n", entry.version));
-        for note in entry.notes {
-            changelog.push_str(&format!("- {}\n", note));
-        }
-        changelog.push('\n');
-    }
-
-    // Pop off the last two newlines
-    changelog.pop();
-    changelog.pop();
-    changelog
 }

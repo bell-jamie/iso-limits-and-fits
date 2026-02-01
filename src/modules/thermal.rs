@@ -24,7 +24,6 @@ pub struct Thermal {
     // Component colours (with gamma pre-applied for plot fill)
     pub hub_colour: Color32,
     pub shaft_colour: Color32,
-    pub colour_gamma: f32,
     #[serde(skip)]
     pub output_view: View,
     #[serde(skip, default = "default_true")]
@@ -57,8 +56,7 @@ impl Thermal {
             shaft_series: vec![20.0, 120.0],
             show_intersections: true,
             hub_colour: Color32::RED.gamma_multiply(0.2),
-            shaft_colour: Color32::BLUE.gamma_multiply(0.2),
-            colour_gamma: 0.2,
+            shaft_colour: Color32::from_rgb(0, 100, 255).gamma_multiply(0.2),
             output_view: View::new(),
             fit_plot_needs_reset: true,
             last_hub_id: None,

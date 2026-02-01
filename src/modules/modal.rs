@@ -1,5 +1,7 @@
 use crate::Studio;
-use egui::{self, Button, Context, Id, Key, RichText};
+use crate::modules::changelog;
+use crate::modules::thermal::Thermal;
+use egui::{self, Button, Context, Id, Key, RichText, ScrollArea};
 
 #[derive(Clone, Copy)]
 pub enum DeleteTarget {
@@ -193,8 +195,7 @@ pub fn thermal_colours(ctx: &Context, app: &mut Studio) {
                     .on_hover_text(format!("Reset {} colour", hub_name))
                     .clicked()
                 {
-                    app.thermal.hub_colour =
-                        egui::Color32::RED.gamma_multiply(app.thermal.colour_gamma);
+                    app.thermal.hub_colour = Thermal::default().hub_colour;
                 }
                 ui.label(&hub_name);
             });
@@ -207,8 +208,7 @@ pub fn thermal_colours(ctx: &Context, app: &mut Studio) {
                     .on_hover_text(format!("Reset {} colour", shaft_name))
                     .clicked()
                 {
-                    app.thermal.shaft_colour =
-                        egui::Color32::BLUE.gamma_multiply(app.thermal.colour_gamma);
+                    app.thermal.shaft_colour = Thermal::default().shaft_colour;
                 }
                 ui.label(&shaft_name);
             });
@@ -225,6 +225,48 @@ pub fn thermal_colours(ctx: &Context, app: &mut Studio) {
                         .fill(ui.visuals().selection.bg_fill);
                     if ui.add(done_btn).clicked() || esc_pressed || enter_pressed {
                         ctx.data_mut(|d| d.remove::<bool>(Id::new("show_thermal_colours")));
+                    }
+                },
+            );
+        });
+    }
+}
+
+pub fn changelog(ctx: &Context) {
+    let show_modal: Option<bool> = ctx.data(|d| d.get_temp(Id::new("show_changelog")));
+    if show_modal.unwrap_or(false) {
+        egui::Modal::new(Id::new("changelog_modal")).show(ctx, |ui| {
+            ui.set_width(280.0);
+            ui.heading("Changelog");
+            ui.separator();
+
+            ScrollArea::vertical().max_height(300.0).show(ui, |ui| {
+                for (i, entry) in changelog::ENTRIES.iter().enumerate() {
+                    if i > 0 {
+                        ui.add_space(8.0);
+                    }
+                    ui.label(RichText::new(format!("v{}", entry.version)).strong());
+                    for note in entry.notes {
+                        ui.horizontal(|ui| {
+                            ui.label("•");
+                            ui.label(*note);
+                        });
+                    }
+                }
+            });
+
+            ui.add_space(10.0);
+
+            let esc_pressed = ui.input(|i| i.key_pressed(Key::Escape));
+            let enter_pressed = ui.input(|i| i.key_pressed(Key::Enter));
+
+            ui.with_layout(
+                egui::Layout::top_down_justified(egui::Align::Center),
+                |ui| {
+                    let done_btn = Button::new(RichText::new("Close").strong())
+                        .fill(ui.visuals().selection.bg_fill);
+                    if ui.add(done_btn).clicked() || esc_pressed || enter_pressed {
+                        ctx.data_mut(|d| d.remove::<bool>(Id::new("show_changelog")));
                     }
                 },
             );
