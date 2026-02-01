@@ -221,7 +221,7 @@ impl Library {
                         // Shaft selection button
                         let shaft_btn =
                             Button::new(RichText::new("🇸").color(shaft_button_colour)).frame(false);
-                        if ui.add(shaft_btn).on_hover_text("Shaft Material").clicked() {
+                        if ui.add(shaft_btn).on_hover_text("Shaft material").clicked() {
                             new_shaft_mat_id = Some(i);
                         }
 
@@ -230,7 +230,7 @@ impl Library {
                         // Hub selection button
                         let hub_btn =
                             Button::new(RichText::new("🇭").color(hub_button_colour)).frame(false);
-                        if ui.add(hub_btn).on_hover_text("Hub Material").clicked() {
+                        if ui.add(hub_btn).on_hover_text("Hub material").clicked() {
                             new_hub_mat_id = Some(i);
                         }
 
@@ -238,7 +238,7 @@ impl Library {
 
                         // Edit button
                         let edit_btn = Button::new(RichText::new("🗖")).frame(false);
-                        if ui.add(edit_btn).on_hover_text("Edit").clicked() {
+                        if ui.add(edit_btn).on_hover_text("Material editor").clicked() {
                             edit_material_id = Some(i);
                         }
                     });
