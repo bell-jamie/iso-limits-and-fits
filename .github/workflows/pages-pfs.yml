@@ -32,8 +32,7 @@ jobs:
         # will obviously return error 404 not found.
         run: ./trunk build --release --public-url $public_url
         env:
-          public_url: "https://${{ github.repository_owner }}.github.io/precision_fit_studio/"
-          # public_url: "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/development"
+          public_url: "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/development"
       - name: Deploy
         uses: JamesIves/github-pages-deploy-action@v4
         with:

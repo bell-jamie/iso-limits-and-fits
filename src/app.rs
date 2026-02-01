@@ -134,9 +134,9 @@ impl Studio {
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         ui.spacing_mut().item_spacing.x = 0.0;
 
-                        if ui.colored_label(release_colour, " alpha")
+                        if ui.colored_label(release_colour, " beta")
                             .on_hover_cursor(egui::CursorIcon::Help)
-                            .on_hover_text("This is an alpha release, bugs are to be expected — check your work (like Soroush does).\nClick to enable debug mode.")
+                            .on_hover_text("This is a beta release, bugs are to be expected — check your work (like Soroush does).\nClick to enable debug mode.")
                             .clicked() { self.state.debug = !self.state.debug; }
 
                         ui.add_space(5.0);
