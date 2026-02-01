@@ -268,14 +268,17 @@ pub fn fit_temp_plot(app: &mut Studio, ui: &mut Ui) {
         RedPoint::new(x1, y1 + 1000.0),
     );
 
+    let (mmc, nc, lmc) = (
+        "max material condition",
+        "nominal condition",
+        "least material condition",
+    );
+
     if app.thermal.show_intersections {
         // Component limit intersections (circle markers)
         // Hub limits vs shaft limits
-        for (hub_seg, hub_label) in [(hub_upper, "least material"), (hub_lower, "max material")] {
-            for (shaft_seg, shaft_label) in [
-                (shaft_upper, "max material"),
-                (shaft_lower, "least material"),
-            ] {
+        for (hub_seg, hub_label) in [(hub_upper, lmc), (hub_lower, mmc)] {
+            for (shaft_seg, shaft_label) in [(shaft_upper, mmc), (shaft_lower, lmc)] {
                 if let Some(pt) = hub_seg.intersect(shaft_seg) {
                     let label = if hub_label == shaft_label {
                         format!("Both {hub_label}")
@@ -290,17 +293,17 @@ pub fn fit_temp_plot(app: &mut Studio, ui: &mut Ui) {
         // Mid-limit intersection (circle marker) - only mid vs mid
         if let Some(pt) = hub_mid.intersect(shaft_mid) {
             component_intersection_points
-                .push((PlotPoint::new(pt.x, pt.y), "Both middle limit".to_string()));
+                .push((PlotPoint::new(pt.x, pt.y), format!("Both {nc}").to_string()));
         }
 
         // Temperature line intersections with all component lines (square markers)
         let component_lines = [
-            (hub_upper, format!("{hub_name} upper limit")),
-            (hub_mid, format!("{hub_name} middle limit")),
-            (hub_lower, format!("{hub_name} lower limit")),
-            (shaft_upper, format!("{shaft_name} upper limit")),
-            (shaft_mid, format!("{shaft_name} middle limit")),
-            (shaft_lower, format!("{shaft_name} lower limit")),
+            (hub_upper, format!("{hub_name} {lmc}")),
+            (hub_mid, format!("{hub_name} {nc}")),
+            (hub_lower, format!("{hub_name} {mmc}")),
+            (shaft_upper, format!("{shaft_name} {mmc}")),
+            (shaft_mid, format!("{shaft_name} {nc}")),
+            (shaft_lower, format!("{shaft_name} {lmc}")),
         ];
 
         for (seg, label) in &component_lines {
