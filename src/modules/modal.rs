@@ -75,7 +75,7 @@ fn warning_modal(
 ) -> Option<bool> {
     let mut result = None;
 
-    egui::Modal::new(id).show(ctx, |ui| {
+    let modal_response = egui::Modal::new(id).show(ctx, |ui| {
         ui.set_width(200.0);
         ui.horizontal(|ui| {
             ui.heading(title);
@@ -91,7 +91,6 @@ fn warning_modal(
         ui.add_space(10.0);
 
         let enter_pressed = ui.input(|i| i.key_pressed(Key::Enter));
-        let esc_pressed = ui.input(|i| i.key_pressed(Key::Escape));
 
         ui.with_layout(
             egui::Layout::top_down_justified(egui::Align::Center),
@@ -101,12 +100,17 @@ fn warning_modal(
                 if ui.add(confirm_btn).clicked() || enter_pressed {
                     result = Some(true);
                 }
-                if ui.button("Cancel").clicked() || esc_pressed {
+                if ui.button("Cancel").clicked() {
                     result = Some(false);
                 }
             },
         );
     });
+
+    // Close on click outside or Escape
+    if modal_response.should_close() {
+        result = Some(false);
+    }
 
     result
 }
@@ -181,7 +185,9 @@ pub fn thermal_colours(ctx: &Context, app: &mut Studio) {
         let hub_name = app.library.get_hub_name().unwrap_or("Hub").to_string();
         let shaft_name = app.library.get_shaft_name().unwrap_or("Shaft").to_string();
 
-        egui::Modal::new(Id::new("thermal_colours_modal")).show(ctx, |ui| {
+        let mut should_close = false;
+
+        let modal_response = egui::Modal::new(Id::new("thermal_colours_modal")).show(ctx, |ui| {
             ui.set_width(200.0);
             ui.heading("Thermal Colours");
             ui.separator();
@@ -215,7 +221,6 @@ pub fn thermal_colours(ctx: &Context, app: &mut Studio) {
 
             ui.add_space(10.0);
 
-            let esc_pressed = ui.input(|i| i.key_pressed(Key::Escape));
             let enter_pressed = ui.input(|i| i.key_pressed(Key::Enter));
 
             ui.with_layout(
@@ -223,19 +228,25 @@ pub fn thermal_colours(ctx: &Context, app: &mut Studio) {
                 |ui| {
                     let done_btn = Button::new(RichText::new("Done").strong())
                         .fill(ui.visuals().selection.bg_fill);
-                    if ui.add(done_btn).clicked() || esc_pressed || enter_pressed {
-                        ctx.data_mut(|d| d.remove::<bool>(Id::new("show_thermal_colours")));
+                    if ui.add(done_btn).clicked() || enter_pressed {
+                        should_close = true;
                     }
                 },
             );
         });
+
+        if should_close || modal_response.should_close() {
+            ctx.data_mut(|d| d.remove::<bool>(Id::new("show_thermal_colours")));
+        }
     }
 }
 
 pub fn changelog(ctx: &Context) {
     let show_modal: Option<bool> = ctx.data(|d| d.get_temp(Id::new("show_changelog")));
     if show_modal.unwrap_or(false) {
-        egui::Modal::new(Id::new("changelog_modal")).show(ctx, |ui| {
+        let mut should_close = false;
+
+        let modal_response = egui::Modal::new(Id::new("changelog_modal")).show(ctx, |ui| {
             ui.set_width(280.0);
             ui.heading("Changelog");
             ui.separator();
@@ -257,7 +268,6 @@ pub fn changelog(ctx: &Context) {
 
             ui.add_space(10.0);
 
-            let esc_pressed = ui.input(|i| i.key_pressed(Key::Escape));
             let enter_pressed = ui.input(|i| i.key_pressed(Key::Enter));
 
             ui.with_layout(
@@ -265,11 +275,15 @@ pub fn changelog(ctx: &Context) {
                 |ui| {
                     let done_btn = Button::new(RichText::new("Close").strong())
                         .fill(ui.visuals().selection.bg_fill);
-                    if ui.add(done_btn).clicked() || esc_pressed || enter_pressed {
-                        ctx.data_mut(|d| d.remove::<bool>(Id::new("show_changelog")));
+                    if ui.add(done_btn).clicked() || enter_pressed {
+                        should_close = true;
                     }
                 },
             );
         });
+
+        if should_close || modal_response.should_close() {
+            ctx.data_mut(|d| d.remove::<bool>(Id::new("show_changelog")));
+        }
     }
 }

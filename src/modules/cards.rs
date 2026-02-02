@@ -141,23 +141,9 @@ impl CardGrid {
     ) {
         ui.horizontal(|ui| {
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                // Focus buttons (OD, ID)
-                if let Some(component) = match card_type {
-                    CardType::Hub => app.library.get_hub_mut(),
-                    CardType::Shaft => app.library.get_shaft_mut(),
-                } {
-                    for (focus_val, label) in [(Focus::Outer, "OD"), (Focus::Inner, "ID")] {
-                        let selected = component.focus == focus_val;
-                        let button = egui::Button::new(label)
-                            .selected(selected)
-                            .frame(true)
-                            .frame_when_inactive(true);
-
-                        if ui.add_enabled(advanced, button).clicked() {
-                            component.focus = focus_val;
-                        }
-                    }
-                }
+                // Focus buttons (OD, ID) - temporarily disabled
+                // TODO: Re-enable when non-primary features are fully implemented
+                let _ = (card_type, advanced); // Suppress unused warnings
 
                 // Name input
                 if let Some(name) = match card_type {

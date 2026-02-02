@@ -138,19 +138,25 @@ impl Library {
                             ui.add_space(-3.0);
                         }
 
-                        // Shaft selection button
+                        // Shaft selection button (disabled if already hub)
                         let shaft_btn =
                             Button::new(RichText::new("🇸").color(shaft_button_colour)).frame(false);
-                        if ui.add(shaft_btn).on_hover_text("Set as Shaft").clicked() {
+                        if ui.add(shaft_btn).on_hover_text("Set as Shaft").clicked()
+                            && !is_shaft
+                            && !is_hub
+                        {
                             new_shaft_id = i;
                         }
 
                         ui.add_space(-5.0);
 
-                        // Hub selection button
+                        // Hub selection button (disabled if already shaft)
                         let hub_btn =
                             Button::new(RichText::new("🇭").color(hub_button_colour)).frame(false);
-                        if ui.add(hub_btn).on_hover_text("Set as Hub").clicked() {
+                        if ui.add(hub_btn).on_hover_text("Set as Hub").clicked()
+                            && !is_hub
+                            && !is_shaft
+                        {
                             new_hub_id = i;
                         }
                     });

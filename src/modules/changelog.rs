@@ -5,6 +5,13 @@ pub struct ChangelogEntry {
 
 pub const ENTRIES: &[ChangelogEntry] = &[
     ChangelogEntry {
+        version: "0.8.1",
+        notes: &[
+            "Double component allocation fixed",
+            "Temporarily removed ID / OD",
+        ],
+    },
+    ChangelogEntry {
         version: "0.8.0",
         notes: &[
             "Material and component library",
