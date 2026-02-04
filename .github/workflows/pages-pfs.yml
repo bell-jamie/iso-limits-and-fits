@@ -3,7 +3,7 @@ name: Github Pages (PFS)
 on:
   push:
     branches:
-      - experimental # need to change this for each dev branch
+      - v0.8.0 # need to change this for each dev branch
 
 permissions:
   contents: write # for committing to gh-pages branch.
